@@ -1,0 +1,32 @@
+/* same as v0.1, omitted for brevity but kept here for a working file */
+:root{
+  --bg:#0b0e12; --panel:#141922; --ink:#d7dce3; --ink2:#9aa3ad;
+  --accent:#58a6ff; --muted:#6b7280; --card:#0f141b;
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; }
+header#controls{ position:sticky; top:0; z-index:10; background:linear-gradient(180deg, rgba(20,25,34,.95), rgba(20,25,34,.85)); backdrop-filter:saturate(120%) blur(6px); border-bottom:1px solid #1f2632; padding:12px 16px; }
+.row{ display:flex; gap:12px; align-items:center; }
+.row.settings{ flex-wrap:wrap; margin-top:8px; }
+.col{ display:flex; flex-direction:column; gap:4px; }
+.inline{ display:flex; gap:8px; align-items:center; }
+.grow{ flex:1; }
+h1{ font-size:18px; margin:0; font-weight:600; }
+button,input,textarea{ background:var(--panel); color:var(--ink); border:1px solid #273142; border-radius:10px; padding:8px 10px; }
+button{ cursor:pointer; } button:hover{ border-color:var(--accent); }
+textarea#pasteList{ min-height:110px; width:min(560px,70vw); }
+.search{ display:flex; align-items:center; gap:6px; position:relative; }
+#autocomplete{ position:absolute; top:110%; left:0; right:0; background:var(--panel); border:1px solid #273142; border-radius:8px; padding:6px; display:none; max-height:220px; overflow:auto; }
+#autocomplete div{ padding:6px 8px; border-radius:6px; cursor:pointer; } #autocomplete div:hover{ background:#1d2430; }
+label.upload{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; } label.upload input{ display:none; }
+label.upload span{ border:1px dashed #3b4558; padding:8px 10px; border-radius:10px; }
+main{ padding:16px; }
+.sheet-wrap{ position:relative; width:990px; aspect-ratio:3300/2550; background:#0a0a0a; margin:0 auto; border-radius:12px; overflow:hidden; border:1px solid #1f2632; }
+#sheet{ width:100%; height:100%; display:block; background:#000; }
+#overlay{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.2; pointer-events:none; mix-blend-mode:screen; display:block; }
+#statusBar{ margin:8px auto 12px; max-width:1000px; font-size:12px; color:var(--ink2); }
+.row.nav{ justify-content:center; margin-top:12px; }
+#thumbStrip{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; justify-content:center; }
+#thumbStrip img{ width:140px; height:auto; border-radius:8px; border:1px solid #283143; display:block; }
+.muted{ color:var(--muted); } .small{ font-size:12px; }
+.hide{ display:none !important; }
