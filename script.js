@@ -1,4 +1,4 @@
-// SW:U Proxy Sheet Tool v0.2 with Netlify proxy for CORS-safe API & images
+// SW:U Proxy Sheet Tool v0.2.2 with robust name resolution + Netlify proxy
 const SWU_FN = '/.netlify/functions/swu';
 
 function swu(path, params={}){
@@ -85,11 +85,11 @@ function saveLocal(){
       thumbDataUrl: s.thumbDataUrl || null,
     }))
   };
-  localStorage.setItem('swu_proxy_tool_v0_2', JSON.stringify(toSave));
+  localStorage.setItem('swu_proxy_tool_v0_2_2', JSON.stringify(toSave));
 }
 
 function loadLocal(){
-  const raw = localStorage.getItem('swu_proxy_tool_v0_2');
+  const raw = localStorage.getItem('swu_proxy_tool_v0_2_2');
   if(!raw) return false;
   try{
     const obj = JSON.parse(raw);
@@ -101,22 +101,40 @@ function loadLocal(){
   }catch{ return false; }
 }
 
+// ---- Name normalization & resolver ----
+function normalizeName(str) {
+  return (str || '').toLowerCase()
+    .replace(/[\\u2018\\u2019]/g, "'")   // curly apostrophes → straight
+    .replace(/[\\u2013\\u2014]/g, "-")   // en/em dash → hyphen
+    .replace(/\\s+/g, " ")              // collapse multiple spaces
+    .trim();
+}
+
+function resolveCardName(inputName) {
+  if (!Array.isArray(state.catalog) || !state.catalog.length) return null;
+  const normInput = normalizeName(inputName);
+  // exact normalized
+  let found = state.catalog.find(c => normalizeName(c) === normInput);
+  // partial normalized
+  if (!found) found = state.catalog.find(c => normalizeName(c).includes(normInput));
+  return found || null;
+}
+
 // ---- API helpers via proxy ----
 async function fetchCatalogNames(){
-  try {
+  try{
     const res = await fetch(swu('/catalog/card-names'));
     const json = await res.json();
-    // ✅ Fix: grab the "data" array
     state.catalog = Array.isArray(json.data) ? json.data : [];
-    console.log("Loaded catalog:", state.catalog.length, "cards");
-  } catch(e) {
+    console.log('Loaded catalog:', state.catalog.length, 'cards');
+  }catch(e){
     console.warn('catalog fetch failed', e);
     state.catalog = [];
   }
 }
 
-
 async function resolveCardByName(name){
+  // First try exact API name:"..."
   const q = `name:"${name}"`;
   try{
     const res = await fetch(swu('/cards/search', { q }));
@@ -136,46 +154,24 @@ async function resolveCardByName(name){
     }
   }catch(e){ console.warn('search err', e); }
 
-  if(state.catalog?.length){
-    const hit = state.catalog.find(n => n.toLowerCase() === name.toLowerCase()) ||
-                state.catalog.find(n => n.toLowerCase().includes(name.toLowerCase()));
-    if(hit){
-      try{
-        const res2 = await fetch(swu('/cards/search', { q: `name:"${hit}"` }));
-        const list2 = await res2.json();
-        if(list2?.length){
-          const c = list2[0];
-          return {
-            name: c.name,
-            set: c.set,
-            number: c.setnumber,
-            image: swu(`/cards/${c.set}/${c.setnumber}`, { format: 'image' }),
-          };
-        }
-      }catch(e){}
-    }
+  // Fallback: normalized + partial match against catalog
+  const hit = resolveCardName(name);
+  if(hit){
+    try{
+      const res2 = await fetch(swu('/cards/search', { q: `name:"${hit}"` }));
+      const list2 = await res2.json();
+      if(Array.isArray(list2) && list2.length){
+        const c = list2[0];
+        return {
+          name: c.name,
+          set: c.set,
+          number: c.setnumber,
+          image: swu(`/cards/${c.set}/${c.setnumber}`, { format: 'image' }),
+        };
+      }
+    }catch(e){ console.warn('fallback search err', e); }
   }
   return null;
-}
-
-
-// ---- Name normalization & resolver ----
-function normalizeName(str) {
-  return str.toLowerCase()
-    .replace(/[\u2018\u2019]/g, "'")   // curly apostrophes → straight
-    .replace(/[\u2013\u2014]/g, "-")   // en/em dash → hyphen
-    .replace(/\s+/g, " ")              // collapse multiple spaces
-    .trim();
-}
-
-function resolveCardName(inputName) {
-  if (!state.catalog || !Array.isArray(state.catalog)) return null;
-  const normInput = normalizeName(inputName);
-  let found = state.catalog.find(c => normalizeName(c) === normInput);
-  if (!found) {
-    found = state.catalog.find(c => normalizeName(c).includes(normInput));
-  }
-  return found || null;
 }
 
 // ---- Layout & Drawing ----
@@ -262,11 +258,9 @@ function updatePageLabel(){ pageLabel.textContent = `Sheet ${state.sheetIndex+1}
 // ---- Adders ----
 async function addCardByName(name, qty=1){
   if(!name) return;
-  const resolved = await (async ()=>{
-    const hit = resolveCardName(name);
-    if(hit){ return await resolveCardByName(hit); }
-    return await resolveCardByName(name);
-  })();
+  // Prefer resolving via our helper for fuzzy names
+  const chosen = resolveCardName(name) || name;
+  const resolved = await resolveCardByName(chosen);
   if(!resolved){ logStatus(`Could not resolve “${name}”.`); return; }
   for(let i=0;i<qty;i++){ await addImageByURL(resolved.image, resolved.name || name); }
 }
@@ -315,7 +309,7 @@ function parseLines(text){
   return items;
 }
 
-// ---- DXF export ---- (unchanged from v0.1)
+// ---- DXF export ----
 function exportDXF(){
   const pageW_in = state.pageW_in;
   const pageH_in = state.pageH_in;
@@ -410,7 +404,7 @@ buttons.clearSheet.onclick = ()=>{ currentSheet().slots = []; render(); };
 buttons.clearAll.onclick = ()=>{ state.sheets = [{slots:[]}]; state.sheetIndex = 0; render(); };
 
 buttons.saveJSON.onclick = ()=>{
-  const data = localStorage.getItem('swu_proxy_tool_v0_2') || '{}';
+  const data = localStorage.getItem('swu_proxy_tool_v0_2_2') || '{}';
   const blob = new Blob([data], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -426,7 +420,7 @@ buttons.loadJSON.onclick = ()=>{
     reader.onload = () => {
       try{
         const obj = JSON.parse(reader.result);
-        localStorage.setItem('swu_proxy_tool_v0_2', JSON.stringify(obj));
+        localStorage.setItem('swu_proxy_tool_v0_2_2', JSON.stringify(obj));
         loadLocal(); logStatus('Layout loaded.');
       }catch(e){ logStatus('Invalid JSON.'); }
     };
@@ -454,9 +448,11 @@ buttons.imgUpload.onchange = async (e)=>{
 };
 
 controls.searchBox.addEventListener('input', () => {
-  const q = controls.searchBox.value.trim().toLowerCase();
+  const q = normalizeName(controls.searchBox.value.trim());
   if(!q){ controls.autocomplete.style.display='none'; return; }
-  const matches = Array.isArray(state.catalog) ? state.catalog.filter(n => normalizeName(n).includes(q)) : [];
+  const matches = Array.isArray(state.catalog)
+    ? state.catalog.filter(n => normalizeName(n).includes(q))
+    : [];
   const box = controls.autocomplete;
   box.innerHTML = '';
   matches.slice(0,12).forEach(n => {
