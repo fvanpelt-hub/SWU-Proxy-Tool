@@ -1,4 +1,4 @@
-// SW:U Proxy Sheet Tool v0.2.4 — resilient name resolution (retry/backoff) + Netlify proxy
+// SW:U Proxy Sheet Tool v0.2.5 — adds set/number parsing & 5xx-resilient search
 const SWU_FN = '/.netlify/functions/swu';
 
 function swu(path, params={}){
@@ -19,7 +19,6 @@ const state = {
 
 // ---- Elements ----
 const sheetCanvas = document.getElementById('sheet');
-const ctx = sheetCanvas.getContext('2d');
 const overlayEl = document.getElementById('overlay');
 
 const controls = {
@@ -64,10 +63,10 @@ function saveLocal(){
     slots: s.slots.map(slot => ({ name:slot.name||null, src:slot.src||null, set:slot.set||null, number:slot.number||null })),
     thumbDataUrl: s.thumbDataUrl || null,
   }))};
-  localStorage.setItem('swu_proxy_tool_v0_2_4', JSON.stringify(toSave));
+  localStorage.setItem('swu_proxy_tool_v0_2_5', JSON.stringify(toSave));
 }
 function loadLocal(){
-  const raw = localStorage.getItem('swu_proxy_tool_v0_2_4'); if(!raw) return false;
+  const raw = localStorage.getItem('swu_proxy_tool_v0_2_5'); if(!raw) return false;
   try{ const obj = JSON.parse(raw); Object.assign(state,obj); overlayEl.style.opacity=state.overlayOpacity; overlayEl.classList.toggle('hide',!state.overlayVisible); render(); return true; }catch{ return false; }
 }
 
@@ -86,34 +85,16 @@ function resolveCardName(inputName){
   return found || null;
 }
 
-// ---- Resilient fetch with retry/backoff ----
-async function fetchJSONWithRetry(url, {attempts=5, initialDelay=250}={}){
-  let delay = initialDelay;
-  for(let i=0;i<attempts;i++){
-    try{
-      const res = await fetch(url, { headers: { 'accept':'application/json' } });
-      if(res.ok){
-        const ct = res.headers.get('content-type') || '';
-        if(ct.includes('application/json')) return await res.json();
-        // fallback if server forgets content-type
-        const text = await res.text();
-        try{ return JSON.parse(text); }catch{ return null; }
-      }
-      // Retry only on 5xx
-      if(res.status >= 500){
-        await new Promise(r=>setTimeout(r, delay));
-        delay = Math.min(delay*2, 2000);
-        continue;
-      } else {
-        // 4xx -> don't retry
-        console.warn('fetchJSON non-OK status', res.status);
-        return null;
-      }
-    }catch(e){
-      // network error -> retry
-      await new Promise(r=>setTimeout(r, delay));
-      delay = Math.min(delay*2, 2000);
-    }
+// ---- Parse helpers ----
+const setNumRegexes = [
+  /(?:^|[\s,(])([A-Z]{2,3})\s*[-]?\s*(\d{1,3})(?:[)\s]|$)/i,        // SOR 10, SOR-10
+  /\(([A-Z]{2,3})\s+(\d{1,3})\)/i,                                  // (SOR 10)
+  /([A-Z]{2,3})\s+(\d{1,3})/i                                       // SOR 10 (loose)
+];
+function extractSetNum(s){
+  for(const rx of setNumRegexes){
+    const m = s.match(rx);
+    if(m) return { set: m[1].toUpperCase(), num: m[2] };
   }
   return null;
 }
@@ -121,42 +102,66 @@ async function fetchJSONWithRetry(url, {attempts=5, initialDelay=250}={}){
 // ---- API helpers via proxy ----
 async function fetchCatalogNames(){
   try{
-    const json = await fetchJSONWithRetry(swu('/catalog/card-names'));
-    state.catalog = Array.isArray(json?.data) ? json.data : [];
+    const res = await fetch(swu('/catalog/card-names'));
+    const json = await res.json();
+    state.catalog = Array.isArray(json.data) ? json.data : [];
     console.log('Loaded catalog:', state.catalog.length, 'cards');
   }catch(e){ console.warn('catalog fetch failed', e); state.catalog = []; }
 }
 
-async function resolveCardByName(name){
-  // Build a short, high-quality query set to avoid hammering the API
-  const variants = [];
-  variants.push(name);
-  const hit = resolveCardName(name); if(hit) variants.push(hit);
-  // Punctuation variants
-  const flipQuotes = s => s.replace(/'/g, "’");
-  const enDash = s => s.replace(/-/g, "–");
-  const addVariantsOf = v => { variants.push(flipQuotes(v)); variants.push(enDash(v)); };
-  addVariantsOf(name); if(hit) addVariantsOf(hit);
-
-  // Build queries (dedup)
-  const queries = new Set();
-  for(const v of variants){
-    queries.add(`name:"${v}"`);
-    queries.add(`"${v}"`);
-    queries.add(v);
+async function fetchJSONWithRetry(url, tries=4){
+  let delay = 250;
+  for(let i=0;i<tries;i++){
+    try{
+      const res = await fetch(url);
+      if(res.ok) return await res.json();
+      // 5xx retry
+      if(res.status >= 500){
+        await new Promise(r=>setTimeout(r, delay));
+        delay = Math.min(2000, delay*2);
+        continue;
+      }
+      return null;
+    }catch(e){
+      await new Promise(r=>setTimeout(r, delay));
+      delay = Math.min(2000, delay*2);
+    }
   }
-  const queryList = Array.from(queries);
-  console.log('Resolver trying queries:', queryList.slice(0,6), '...');
+  return null;
+}
 
-  // Try sequentially with retries
-  for(const q of queryList){
-    const list = await fetchJSONWithRetry(swu('/cards/search', { q }));
-    if(Array.isArray(list) && list.length){
-      const c = list[0];
+async function resolveCardByName(name){
+  // If user included (SET NUM) or "SET 123", bypass search and build image URL.
+  const sn = extractSetNum(name);
+  if(sn){
+    return {
+      name,
+      set: sn.set,
+      number: sn.num,
+      image: swu(`/cards/${sn.set}/${sn.num}`, { format: 'image' }),
+    };
+  }
+
+  // Otherwise: build a small set of smart queries around the best catalog match.
+  const variants = [];
+  const hit = resolveCardName(name); if(hit) variants.push(hit);
+  variants.push(name);
+
+  const uniq = Array.from(new Set(variants
+    .flatMap(v => [`name:"${v}"`, v])
+  ));
+
+  console.log('Resolver trying queries:', uniq.slice(0,6), '...');
+
+  for(const q of uniq){
+    const json = await fetchJSONWithRetry(swu('/cards/search',{ q }));
+    if(!json) continue;
+    if(Array.isArray(json) && json.length){
+      const c = json[0];
       if(c?.set && c?.setnumber){
         return {
           name: c.name, set: c.set, number: c.setnumber,
-          image: swu(`/cards/${c.set}/${c.setnumber}`, { format: 'image' }),
+          image: swu(`/cards/${c.set}/${c.setnumber}`, { format:'image' }),
         };
       }
     }
@@ -181,6 +186,7 @@ function updateFromControls(){
   overlayEl.classList.toggle('hide',!state.overlayVisible);
   sheetCanvas.width = px(state.pageW_in); sheetCanvas.height = px(state.pageH_in);
 }
+
 function render(){
   updateFromControls();
   const pageW_px=sheetCanvas.width, pageH_px=sheetCanvas.height;
@@ -214,7 +220,7 @@ function updatePageLabel(){ pageLabel.textContent=`Sheet ${state.sheetIndex+1} /
 async function addCardByName(name, qty=1){
   if(!name) return;
   const resolved = await resolveCardByName(name);
-  if(!resolved){ logStatus(`Could not resolve “${name}”.`); return; }
+  if(!resolved){ logStatus(`Could not resolve “${name}”. Tip: include set & number like “(SOR 10)”.`); return; }
   for(let i=0;i<qty;i++){ await addImageByURL(resolved.image, resolved.name || name); }
 }
 function loadImage(url){ return new Promise((resolve,reject)=>{ const img=new Image(); img.crossOrigin='anonymous'; img.onload=()=>resolve(img); img.onerror=reject; img.src=url; }); }
@@ -225,14 +231,18 @@ async function addImageByURL(url,label=''){
   if(target>=slotCount()){ state.sheets.push({slots:[]}); state.sheetIndex=state.sheets.length-1; ensureSlots(currentSheet()); }
   try{ const img=await loadImage(url); const slot=currentSheet().slots.find(s=>!s.img); if(slot){ slot.img=img; slot.name=label; slot.src=url; } render(); logStatus(`Added: ${label||url}`); }catch(e){ console.error(e); logStatus('Failed to load image URL'); }
 }
+
 function parseLines(text){
   const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean); const items=[];
   for(const line of lines){
-    let qty=1, name=line; const m1=line.match(/^(\d+)\s+x?\s*(.+)$/i);
+    let qty=1, name=line;
+    const m1=line.match(/^(\d+)\s+x?\s*(.+)$/i);
     if(m1){ qty=parseInt(m1[1],10); name=m1[2]; }
     else{ const m2=line.match(/^(.+?)\s+x\s*(\d+)$/i); if(m2){ name=m2[1]; qty=parseInt(m2[2],10); } }
-    name=name.replace(/\(.*?\)/g,'').replace(/\s{2,}/g,' ').trim(); items.push({name,qty});
-  } return items;
+    // DO NOT strip parentheticals yet; we need them for (SET NUM)
+    items.push({name:name.trim(), qty});
+  }
+  return items;
 }
 
 // ---- DXF export ----
@@ -300,13 +310,13 @@ buttons.clearSheet.onclick=()=>{ currentSheet().slots=[]; render(); };
 buttons.clearAll.onclick=()=>{ state.sheets=[{slots:[]}]; state.sheetIndex=0; render(); };
 
 buttons.saveJSON.onclick=()=>{
-  const data=localStorage.getItem('swu_proxy_tool_v0_2_4')||'{}';
+  const data=localStorage.getItem('swu_proxy_tool_v0_2_5')||'{}';
   const blob=new Blob([data],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='swu_proxy_layout.json'; a.click();
 };
 buttons.loadJSON.onclick=()=>{
   const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
-  inp.onchange=()=>{ const f=inp.files?.[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); localStorage.setItem('swu_proxy_tool_v0_2_4', JSON.stringify(obj)); loadLocal(); logStatus('Layout loaded.'); }catch(e){ logStatus('Invalid JSON.'); } }; reader.readAsText(f); }; inp.click();
+  inp.onchange=()=>{ const f=inp.files?.[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); localStorage.setItem('swu_proxy_tool_v0_2_5', JSON.stringify(obj)); loadLocal(); logStatus('Layout loaded.'); }catch(e){ logStatus('Invalid JSON.'); } }; reader.readAsText(f); }; inp.click();
 };
 
 buttons.parse.onclick=async ()=>{
@@ -329,5 +339,5 @@ document.addEventListener('click', (e)=>{ if(!controls.autocomplete.contains(e.t
 (async function init(){
   loadLocal(); ensureSlots(currentSheet());
   await fetchCatalogNames(); render();
-  logStatus('Ready. (Netlify proxy active; v0.2.4 resolver with retry/backoff)');
+  logStatus('Ready. (v0.2.5 with set/number parsing & retry)');
 })();
