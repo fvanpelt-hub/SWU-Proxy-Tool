@@ -103,13 +103,18 @@ function loadLocal(){
 
 // ---- API helpers via proxy ----
 async function fetchCatalogNames(){
-  try{
+  try {
     const res = await fetch(swu('/catalog/card-names'));
-    state.catalog = await res.json() || [];
-  }catch(e){
+    const json = await res.json();
+    // ✅ Fix: grab the "data" array
+    state.catalog = Array.isArray(json.data) ? json.data : [];
+    console.log("Loaded catalog:", state.catalog.length, "cards");
+  } catch(e) {
     console.warn('catalog fetch failed', e);
+    state.catalog = [];
   }
 }
+
 
 async function resolveCardByName(name){
   const q = `name:"${name}"`;
