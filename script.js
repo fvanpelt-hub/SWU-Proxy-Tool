@@ -1,4 +1,4 @@
-// SW:U Proxy Sheet Tool v0.2.3 — stronger name resolution + Netlify proxy
+// SW:U Proxy Sheet Tool v0.2.4 — resilient name resolution (retry/backoff) + Netlify proxy
 const SWU_FN = '/.netlify/functions/swu';
 
 function swu(path, params={}){
@@ -64,10 +64,10 @@ function saveLocal(){
     slots: s.slots.map(slot => ({ name:slot.name||null, src:slot.src||null, set:slot.set||null, number:slot.number||null })),
     thumbDataUrl: s.thumbDataUrl || null,
   }))};
-  localStorage.setItem('swu_proxy_tool_v0_2_3', JSON.stringify(toSave));
+  localStorage.setItem('swu_proxy_tool_v0_2_4', JSON.stringify(toSave));
 }
 function loadLocal(){
-  const raw = localStorage.getItem('swu_proxy_tool_v0_2_3'); if(!raw) return false;
+  const raw = localStorage.getItem('swu_proxy_tool_v0_2_4'); if(!raw) return false;
   try{ const obj = JSON.parse(raw); Object.assign(state,obj); overlayEl.style.opacity=state.overlayOpacity; overlayEl.classList.toggle('hide',!state.overlayVisible); render(); return true; }catch{ return false; }
 }
 
@@ -86,64 +86,82 @@ function resolveCardName(inputName){
   return found || null;
 }
 
-// ---- API helpers via proxy ----
-async function fetchCatalogNames(){
-  try{
-    const res = await fetch(swu('/catalog/card-names'));
-    const json = await res.json();
-    state.catalog = Array.isArray(json.data) ? json.data : [];
-    console.log('Loaded catalog:', state.catalog.length, 'cards');
-  }catch(e){ console.warn('catalog fetch failed', e); state.catalog = []; }
-}
-
-// Try a list of queries until one returns a usable card
-async function tryQueries(queries){
-  for(const q of queries){
+// ---- Resilient fetch with retry/backoff ----
+async function fetchJSONWithRetry(url, {attempts=5, initialDelay=250}={}){
+  let delay = initialDelay;
+  for(let i=0;i<attempts;i++){
     try{
-      const res = await fetch(swu('/cards/search', { q }));
-      if(!res.ok) continue;
-      const list = await res.json();
-      if(Array.isArray(list) && list.length){
-        const c = list[0];
-        if(c?.set && c?.setnumber){
-          return {
-            name: c.name, set: c.set, number: c.setnumber,
-            image: swu(`/cards/${c.set}/${c.setnumber}`, { format: 'image' }),
-          };
-        }
+      const res = await fetch(url, { headers: { 'accept':'application/json' } });
+      if(res.ok){
+        const ct = res.headers.get('content-type') || '';
+        if(ct.includes('application/json')) return await res.json();
+        // fallback if server forgets content-type
+        const text = await res.text();
+        try{ return JSON.parse(text); }catch{ return null; }
       }
-    }catch(e){ /* ignore and continue */ }
+      // Retry only on 5xx
+      if(res.status >= 500){
+        await new Promise(r=>setTimeout(r, delay));
+        delay = Math.min(delay*2, 2000);
+        continue;
+      } else {
+        // 4xx -> don't retry
+        console.warn('fetchJSON non-OK status', res.status);
+        return null;
+      }
+    }catch(e){
+      // network error -> retry
+      await new Promise(r=>setTimeout(r, delay));
+      delay = Math.min(delay*2, 2000);
+    }
   }
   return null;
 }
 
+// ---- API helpers via proxy ----
+async function fetchCatalogNames(){
+  try{
+    const json = await fetchJSONWithRetry(swu('/catalog/card-names'));
+    state.catalog = Array.isArray(json?.data) ? json.data : [];
+    console.log('Loaded catalog:', state.catalog.length, 'cards');
+  }catch(e){ console.warn('catalog fetch failed', e); state.catalog = []; }
+}
+
 async function resolveCardByName(name){
+  // Build a short, high-quality query set to avoid hammering the API
   const variants = [];
-  // Start with the user's input
   variants.push(name);
-  // Catalog-best match
   const hit = resolveCardName(name); if(hit) variants.push(hit);
   // Punctuation variants
   const flipQuotes = s => s.replace(/'/g, "’");
   const enDash = s => s.replace(/-/g, "–");
-  variants.slice(0).forEach(v => { variants.push(flipQuotes(v)); variants.push(enDash(v)); });
+  const addVariantsOf = v => { variants.push(flipQuotes(v)); variants.push(enDash(v)); };
+  addVariantsOf(name); if(hit) addVariantsOf(hit);
 
-  // Build queries per variant
-  const queries = [];
+  // Build queries (dedup)
+  const queries = new Set();
   for(const v of variants){
-    queries.push(`name:"${v}"`);
-    queries.push(`name:${v}`);
-    queries.push(`"${v}"`);
-    queries.push(v);
+    queries.add(`name:"${v}"`);
+    queries.add(`"${v}"`);
+    queries.add(v);
   }
-  // De-dup queries
-  const uniq = Array.from(new Set(queries));
+  const queryList = Array.from(queries);
+  console.log('Resolver trying queries:', queryList.slice(0,6), '...');
 
-  console.log('Resolver trying queries:', uniq.slice(0,6), '...');
-
-  // Try in order
-  const result = await tryQueries(uniq);
-  return result;
+  // Try sequentially with retries
+  for(const q of queryList){
+    const list = await fetchJSONWithRetry(swu('/cards/search', { q }));
+    if(Array.isArray(list) && list.length){
+      const c = list[0];
+      if(c?.set && c?.setnumber){
+        return {
+          name: c.name, set: c.set, number: c.setnumber,
+          image: swu(`/cards/${c.set}/${c.setnumber}`, { format: 'image' }),
+        };
+      }
+    }
+  }
+  return null;
 }
 
 // ---- Layout & Drawing ----
@@ -282,13 +300,13 @@ buttons.clearSheet.onclick=()=>{ currentSheet().slots=[]; render(); };
 buttons.clearAll.onclick=()=>{ state.sheets=[{slots:[]}]; state.sheetIndex=0; render(); };
 
 buttons.saveJSON.onclick=()=>{
-  const data=localStorage.getItem('swu_proxy_tool_v0_2_3')||'{}';
+  const data=localStorage.getItem('swu_proxy_tool_v0_2_4')||'{}';
   const blob=new Blob([data],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='swu_proxy_layout.json'; a.click();
 };
 buttons.loadJSON.onclick=()=>{
   const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
-  inp.onchange=()=>{ const f=inp.files?.[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); localStorage.setItem('swu_proxy_tool_v0_2_3', JSON.stringify(obj)); loadLocal(); logStatus('Layout loaded.'); }catch(e){ logStatus('Invalid JSON.'); } }; reader.readAsText(f); }; inp.click();
+  inp.onchange=()=>{ const f=inp.files?.[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const obj=JSON.parse(reader.result); localStorage.setItem('swu_proxy_tool_v0_2_4', JSON.stringify(obj)); loadLocal(); logStatus('Layout loaded.'); }catch(e){ logStatus('Invalid JSON.'); } }; reader.readAsText(f); }; inp.click();
 };
 
 buttons.parse.onclick=async ()=>{
@@ -311,5 +329,5 @@ document.addEventListener('click', (e)=>{ if(!controls.autocomplete.contains(e.t
 (async function init(){
   loadLocal(); ensureSlots(currentSheet());
   await fetchCatalogNames(); render();
-  logStatus('Ready. (Netlify proxy active; v0.2.3 resolver)');
+  logStatus('Ready. (Netlify proxy active; v0.2.4 resolver with retry/backoff)');
 })();
