@@ -158,6 +158,26 @@ async function resolveCardByName(name){
   return null;
 }
 
+
+// ---- Name normalization & resolver ----
+function normalizeName(str) {
+  return str.toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")   // curly apostrophes → straight
+    .replace(/[\u2013\u2014]/g, "-")   // en/em dash → hyphen
+    .replace(/\s+/g, " ")              // collapse multiple spaces
+    .trim();
+}
+
+function resolveCardName(inputName) {
+  if (!state.catalog || !Array.isArray(state.catalog)) return null;
+  const normInput = normalizeName(inputName);
+  let found = state.catalog.find(c => normalizeName(c) === normInput);
+  if (!found) {
+    found = state.catalog.find(c => normalizeName(c).includes(normInput));
+  }
+  return found || null;
+}
+
 // ---- Layout & Drawing ----
 function currentSheet(){ return state.sheets[state.sheetIndex]; }
 function updateFromControls(){
@@ -242,7 +262,11 @@ function updatePageLabel(){ pageLabel.textContent = `Sheet ${state.sheetIndex+1}
 // ---- Adders ----
 async function addCardByName(name, qty=1){
   if(!name) return;
-  const resolved = await resolveCardByName(name);
+  const resolved = await (async ()=>{
+    const hit = resolveCardName(name);
+    if(hit){ return await resolveCardByName(hit); }
+    return await resolveCardByName(name);
+  })();
   if(!resolved){ logStatus(`Could not resolve “${name}”.`); return; }
   for(let i=0;i<qty;i++){ await addImageByURL(resolved.image, resolved.name || name); }
 }
@@ -432,7 +456,7 @@ buttons.imgUpload.onchange = async (e)=>{
 controls.searchBox.addEventListener('input', () => {
   const q = controls.searchBox.value.trim().toLowerCase();
   if(!q){ controls.autocomplete.style.display='none'; return; }
-  const matches = state.catalog.filter(n => n.toLowerCase().includes(q));
+  const matches = Array.isArray(state.catalog) ? state.catalog.filter(n => normalizeName(n).includes(q)) : [];
   const box = controls.autocomplete;
   box.innerHTML = '';
   matches.slice(0,12).forEach(n => {
