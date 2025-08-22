@@ -1,53 +1,22 @@
-# SW:Unlimited Proxy Sheet Tool
+# SW:Unlimited — Proxy Sheet Tool (v0.2.6a)
 
-A single‑page web app to generate printable **Star Wars: Unlimited** proxy sheets (2×4 @ 300 DPI), sized for **11″×8.5″ landscape** and exportable for **Silhouette Cameo** workflows. Includes a **Netlify Function** proxy so SWU‑DB API calls (and images) work CORS‑free.
+**What’s included**
+- `index.html` (UI wired to the tool)
+- `styles.css` (minimal dark theme)
+- `script.js` v0.2.6a (overlay + pasted list fixes)
+- `assets/letter_poker_v2_fixed.svg` (2x4 template for letter paper)
+- Netlify function `netlify/functions/swu.js` that proxies to SWU-DB and CDN with CORS headers
+- `netlify.toml` build + redirect config
 
-> Personal proxy use only. Not affiliated with FFG/Lucasfilm.
+**Deploy**
+1. Push to your GitHub repo connected to Netlify.
+2. The site should serve at `/.netlify/functions/swu` and `assets/letter_poker_v2_fixed.svg`.
+3. If you prefer `/functions/swu`, the provided redirect maps it.
 
-## Demo (self-hosted)
-Deploy to Netlify using the Git integration (recommended). Functions are included at `netlify/functions/swu.js`.
+**Usage**
+- Paste names (one per line, commas/semicolons OK). Supports `2x Name` style counts.
+- Adjust layout: `4 cols × 2 rows`, `2.5 × 3.5 in`, bleed in mm, margins in inches.
+- Toggle the overlay or upload your own PNG/SVG.
+- Export PNG or print to PDF (via jsPDF).
 
-## Quick Start (Local)
-- You can open `index.html` directly in a modern browser for basic testing.
-- Functions **won’t** run locally unless you use Netlify CLI:
-
-```bash
-npm i -g netlify-cli
-netlify dev
-# open the printed local URL; the proxy function will be available at
-# /.netlify/functions/swu?path=/catalog/card-names
-```
-
-## Deploy to Netlify (Git Workflow)
-1. **Import this repo** into your GitHub (or fork it).
-2. On Netlify: **Add new site → Import from Git** → pick this repo.
-3. Confirm settings from `netlify.toml`:
-   ```toml
-   [build]
-     publish = "."
-     functions = "netlify/functions"
-
-   [functions]
-     node_bundler = "esbuild"
-   ```
-4. Deploy; then verify the function:
-   ```
-   https://<your-site>.netlify.app/.netlify/functions/swu?path=/catalog/card-names
-   ```
-
-## Use
-- Paste deck list (supports quantities like `2 Name`, or `Name x2`).
-- Search/autocomplete for card names (via SWU‑DB).
-- Upload custom images.
-- **Export PNG** (3300×2550), **Print** (Scale 100%, Margins None), **Export DXF** for cutlines.
-
-### Default Layout
-- **Card**: 2.5″×3.5″ (750×1050 px @ 300 DPI)
-- **Page**: 11″×8.5″ (3300×2550 px @ 300 DPI, landscape)
-- **Grid**: 4 columns × 2 rows
-- **Margins**: 0.5″ left/right, 0.75″ top/bottom
-- **Bleed**: 0.5 mm (behind image only; cutlines are at edge)
-- **Calibration**: 1″ square at bottom‑left
-
-## Legal
-Star Wars™ © & ™ Lucasfilm. Star Wars: Unlimited © Fantasy Flight Games. This project is for personal proxy printing and educational use only.
+Personal use only. SWU data © their respective owners.

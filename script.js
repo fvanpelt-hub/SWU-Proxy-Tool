@@ -1,11 +1,9 @@
-/* SWU Proxy Sheet Tool — ordering fix for `$` + robust overlay (v0.2.6a) */
+/* SWU Proxy Sheet Tool — ordering fix for `$` + robust overlay + pasted list parsing (v0.2.6a) */
 (() => {
   'use strict';
   console.log('[swu-sheet] script loaded');
-
   const FN_BASE = '/.netlify/functions';
-
-  // --- helpers MUST be defined before init() can run
+  // helpers defined BEFORE init()
   const $ = (id) => document.getElementById(id);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const mmToPx = (mm, dpi) => (mm / 25.4) * dpi;
@@ -38,8 +36,7 @@
         blobCache.set(url, blob);
         return blob;
       } catch (e) {
-        lastErr = e;
-        await new Promise(r => setTimeout(r, 250 * (i + 1)));
+        lastErr = e; await new Promise(r => setTimeout(r, 250 * (i + 1)));
       }
     }
     throw lastErr;
@@ -51,7 +48,7 @@
     return await createImageBitmap(blob);
   }
 
-  // Safe SVG overlay loader (works when createImageBitmap can't decode SVG)
+  // Robust overlay loader (works even if createImageBitmap can't decode SVG)
   async function loadOverlayFrom(path) {
     const res = await fetch(path);
     if (!res.ok) throw new Error(`overlay fetch failed: ${res.status}`);
@@ -61,22 +58,17 @@
       try { return await createImageBitmap(blob); } catch {}
     }
     const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = url;
+    const img = new Image(); img.decoding = 'async'; img.src = url;
     try {
       if (img.decode) await img.decode();
       else await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
-    } finally {
-      // keep object URL alive until drawn
-    }
+    } finally {}
     return img;
   }
 
   async function resolveSWUByName(name) {
     const cacheKey = `name:${name}`;
     if (bmpCache.has(cacheKey)) return bmpCache.get(cacheKey);
-
     const search = await SWU('/cards/search', { q: `name:"${name}"` });
     if (!search.ok) throw new Error(`SWU search failed for "${name}"`);
     const js = await search.json();
@@ -165,7 +157,7 @@
   }
 
   function wrapText(ctx, text, x, y, mw, lh) {
-    const lines = (text + '').split('\\n').flatMap(line => {
+    const lines = (text + '').split('\n').flatMap(line => {
       const words = line.split(' ');
       let buf = '', out = [];
       for (const w of words) {
@@ -214,7 +206,7 @@
         ctx.fillStyle = '#ffeded'; ctx.fillRect(s.x, s.y, s.w, s.h);
         ctx.strokeStyle = '#d33'; ctx.lineWidth = 6; ctx.strokeRect(s.x+3, s.y+3, s.w-6, s.h-6);
         ctx.fillStyle = '#900'; ctx.font = '26px system-ui, sans-serif';
-        wrapText(ctx, `Failed:\\n${name}`, s.x + 16, s.y + 40, s.w - 32, 34);
+        wrapText(ctx, `Failed:\n${name}`, s.x + 16, s.y + 40, s.w - 32, 34);
       }
     }
 
@@ -252,20 +244,31 @@
       }
     });
 
+    // Improved pasted-list parsing (supports "2x Name", commas/semicolons/newlines)
     parseBtn && parseBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       const area = $('#pasteList') || document.querySelector('textarea');
-      const names = (area?.value || '').split(/\\r?\\n/).map(s => s.trim()).filter(Boolean);
-      if (!names.length) { alert('Paste card names, one per line.'); return; }
-      state.names = names; await render();
+      const sanitize = (s) =>
+        s.replace(/^\s*\d+\s*[x×]\s*/i, '')  // strip "2x "
+         .replace(/\s{2,}/g, ' ')               // collapse
+         .trim();
+      const names = (area?.value || '')
+        .split(/[\n,;]+/)
+        .map(sanitize)
+        .filter(Boolean);
+      console.log('[swu-sheet] parsed names:', names);
+      state.names = names;
+      await render();
     });
 
     addBtn && addBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       const box = $('#searchBox') || document.querySelector('input[type="text"]');
-      const n = (box?.value || '').trim();
+      const sanitize = (s) => s.replace(/^\s*\d+\s*[x×]\s*/i, '').replace(/\s{2,}/g, ' ').trim();
+      const n = sanitize(box?.value || '');
       if (!n) return;
-      state.names.push(n); await render();
+      state.names.push(n);
+      await render();
     });
 
     $('#overlayFile')?.addEventListener('change', async (e) => {

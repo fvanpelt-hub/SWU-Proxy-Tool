@@ -2,7 +2,8 @@
   publish = "."
   functions = "netlify/functions"
 
+# Convenience local path for /functions/swu -> /.netlify/functions/swu
 [[redirects]]
-  from = "/functions/*"
-  to   = "/.netlify/functions/:splat"
+  from = "/functions/swu"
+  to = "/.netlify/functions/swu"
   status = 200

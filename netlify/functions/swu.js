@@ -1,46 +1,52 @@
-// SWU proxy (API + CDN + ?url= passthrough)
-const API_ORIGIN = 'https://api.swu-db.com';
-const CDN_ORIGIN = 'https://cdn.swu-db.com';
+// netlify/functions/swu.js
+const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
-export async function handler(event) {
+exports.handler = async (event) => {
   try {
-    const qs = event.queryStringParameters || {};
-    let targetUrl;
+    const { queryStringParameters = {} } = event;
+    const path = queryStringParameters.path || '';
+    const url  = queryStringParameters.url || '';
+    const format = (queryStringParameters.format || '').toLowerCase();
 
-    if (qs.url) {
-      const u = new URL(qs.url);
-      const allow = new Set(['api.swu-db.com', 'cdn.swu-db.com', 'www.swu-db.com', 'swu-db.com']);
-      if (!allow.has(u.hostname)) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Host not allowed' }) };
-      }
-      targetUrl = u.toString();
-    } else {
-      const path = qs.path || '/cards/search';
-      const base = path.startsWith('/images/') ? CDN_ORIGIN : API_ORIGIN;
-      const u = new URL(base + path);
-      for (const [k, v] of Object.entries(qs)) {
-        if (k !== 'path' && k !== 'url' && v != null) u.searchParams.set(k, v);
-      }
-      targetUrl = u.toString();
+    const CORS = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+    };
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: CORS, body: '' };
     }
 
-    const upstream = await fetch(targetUrl, { redirect: 'follow' });
-    const contentType = upstream.headers.get('content-type') || '';
-    const arrayBuf = await upstream.arrayBuffer();
+    // Direct proxy to arbitrary URL (safest way to bypass CORS for cdn.swu-db.com)
+    if (url) {
+      const resp = await fetch(url);
+      const buf = await resp.buffer();
+      const ct = resp.headers.get('content-type') || 'application/octet-stream';
+      return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': ct }, body: buf.toString('base64'), isBase64Encoded: true };
+    }
 
-    const isImage = contentType.startsWith('image/') ||
-      /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(new URL(targetUrl).pathname);
+    // API base
+    const API_BASE = 'https://api.swu-db.com';
+    const CDN_BASE = 'https://cdn.swu-db.com/images/cards';
 
-    return {
-      statusCode: upstream.status,
-      headers: {
-        'Content-Type': contentType || (isImage ? 'image/png' : 'application/json'),
-        'Cache-Control': 'public, max-age=3600',
-      },
-      body: isImage ? Buffer.from(arrayBuf).toString('base64') : Buffer.from(arrayBuf).toString('utf8'),
-      isBase64Encoded: isImage,
-    };
+    // If asked for an image with /cards/<set>/<num>, build CDN URL directly
+    if (format === 'image' && path.startsWith('/cards/')) {
+      const parts = path.replace(/^\/cards\//, '').split('/');
+      const set = (parts[0] || '').toUpperCase();
+      const num = String(parts[1] || '').padStart(3, '0');
+      const cdn = `${CDN_BASE}/${set}/${num}.png`;
+      const resp = await fetch(cdn);
+      const buf = await resp.buffer();
+      return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': 'image/png' }, body: buf.toString('base64'), isBase64Encoded: true };
+    }
+
+    // Otherwise proxy to API JSON
+    const target = `${API_BASE}${path || '/catalog/card-names'}`;
+    const resp = await fetch(target);
+    const text = await resp.text();
+    const ct = resp.headers.get('content-type') || 'application/json; charset=utf-8';
+    return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': ct }, body: text };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: String(err) }) };
   }
-}
+};
