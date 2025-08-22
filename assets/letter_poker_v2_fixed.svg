@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="3300" height="2550" viewBox="0 0 3300 2550" xmlns="http://www.w3.org/2000/svg">
+  <!-- outer page border (optional) -->
   <rect width="3300" height="2550" fill="none" stroke="#333" stroke-width="8"/>
-  <g stroke="#4aa3ff" fill="none" stroke-width="3" opacity="0.9">
-    <rect x="150" y="225" width="750" height="1050"/>
-    <rect x="900" y="225" width="750" height="1050"/>
-    <rect x="1650" y="225" width="750" height="1050"/>
-    <rect x="2400" y="225" width="750" height="1050"/>
-    <rect x="150" y="1275" width="750" height="1050"/>
-    <rect x="900" y="1275" width="750" height="1050"/>
+  <!-- 2×4 grid — 2.5in × 3.5in at 300dpi = 750×1050 each
+       margins: 0.5in left/right (150px), 0.75in top/bottom (225px) -->
+  <g stroke="#f66" fill="none" stroke-width="3" opacity="0.6">
+    <!-- row 1 -->
+    <rect x="150"  y="225"  width="750" height="1050"/>
+    <rect x="900"  y="225"  width="750" height="1050"/>
+    <rect x="1650" y="225"  width="750" height="1050"/>
+    <rect x="2400" y="225"  width="750" height="1050"/>
+    <!-- row 2 -->
+    <rect x="150"  y="1275" width="750" height="1050"/>
+    <rect x="900"  y="1275" width="750" height="1050"/>
     <rect x="1650" y="1275" width="750" height="1050"/>
     <rect x="2400" y="1275" width="750" height="1050"/>
   </g>
