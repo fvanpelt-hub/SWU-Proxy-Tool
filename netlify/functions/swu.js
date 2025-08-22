@@ -1,4 +1,4 @@
-// Enhanced SWU proxy: API + CDN + absolute URL passthrough (whitelist)
+// SWU proxy (API + CDN + ?url= passthrough)
 const API_ORIGIN = 'https://api.swu-db.com';
 const CDN_ORIGIN = 'https://cdn.swu-db.com';
 

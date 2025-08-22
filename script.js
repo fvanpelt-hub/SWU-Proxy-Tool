@@ -100,7 +100,7 @@
     const fitsLandscape = (cols * cardW + 2 * mL <= 11)  && (rows * cardH + 2 * mT <= 8.5);
     return fitsPortrait ? { wIn: 8.5, hIn: 11, orient: 'portrait' }
          : fitsLandscape ? { wIn: 11, hIn: 8.5, orient: 'landscape' }
-         : { wIn: 11, hIn: 8.5, orient: 'landscape' }; // bias landscape for 2x4
+         : { wIn: 11, hIn: 8.5, orient: 'landscape' };
   }
 
   function getGeom() {
@@ -136,7 +136,7 @@
 
   async function ensureUserSVGOverlay() {
     if (state.overlayBmp) return;
-    const p = 'assets/letter_poker_v2_fixed.svg'; // <-- YOUR SVG
+    const p = 'assets/letter_poker_v2_fixed.svg';
     try {
       const res = await fetch(p);
       if (!res.ok) throw new Error(`Overlay not found: ${p}`);

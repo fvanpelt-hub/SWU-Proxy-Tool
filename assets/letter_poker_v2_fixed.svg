@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="3300" height="2550" viewBox="0 0 3300 2550" xmlns="http://www.w3.org/2000/svg">
   <rect width="3300" height="2550" fill="none" stroke="#333" stroke-width="8"/>
-  <!-- 2x4 2.5x3.5 at 300dpi: 750x1050 each, margins 0.5in left/right (150px), 0.75in top/bottom (225px) -->
-  <g stroke="#f66" fill="none" stroke-width="3" opacity="0.6">
-    <!-- columns -->
+  <g stroke="#4aa3ff" fill="none" stroke-width="3" opacity="0.9">
     <rect x="150" y="225" width="750" height="1050"/>
     <rect x="900" y="225" width="750" height="1050"/>
     <rect x="1650" y="225" width="750" height="1050"/>
     <rect x="2400" y="225" width="750" height="1050"/>
-    <!-- second row -->
     <rect x="150" y="1275" width="750" height="1050"/>
     <rect x="900" y="1275" width="750" height="1050"/>
     <rect x="1650" y="1275" width="750" height="1050"/>
