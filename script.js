@@ -1,13 +1,11 @@
-/* SWU Proxy Sheet Tool — robust SVG overlay decode (v0.2.6) */
+/* SWU Proxy Sheet Tool — ordering fix for `$` + robust overlay (v0.2.6a) */
 (() => {
   'use strict';
   console.log('[swu-sheet] script loaded');
 
   const FN_BASE = '/.netlify/functions';
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-
+  // --- helpers MUST be defined before init() can run
   const $ = (id) => document.getElementById(id);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const mmToPx = (mm, dpi) => (mm / 25.4) * dpi;
@@ -53,7 +51,7 @@
     return await createImageBitmap(blob);
   }
 
-  // NEW: robust overlay loader (SVG-safe)
+  // Safe SVG overlay loader (works when createImageBitmap can't decode SVG)
   async function loadOverlayFrom(path) {
     const res = await fetch(path);
     if (!res.ok) throw new Error(`overlay fetch failed: ${res.status}`);
@@ -70,7 +68,7 @@
       if (img.decode) await img.decode();
       else await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
     } finally {
-      // keep URL alive through drawImage; revoke later if you want
+      // keep object URL alive until drawn
     }
     return img;
   }
@@ -299,4 +297,9 @@
     await render();
     console.log('[swu-sheet] init complete');
   }
+
+  // run AFTER helpers exist
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
 })();
