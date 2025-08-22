@@ -1,4 +1,4 @@
-// Enhanced SWU proxy: API + CDN + absolute URL passthrough (whitelist)
+// SWU proxy (API + CDN + ?url= passthrough)
 const API_ORIGIN = 'https://api.swu-db.com';
 const CDN_ORIGIN = 'https://cdn.swu-db.com';
 
@@ -8,7 +8,6 @@ export async function handler(event) {
     let targetUrl;
 
     if (qs.url) {
-      // Absolute URL passthrough (whitelisted hosts only)
       const u = new URL(qs.url);
       const allow = new Set(['api.swu-db.com', 'cdn.swu-db.com', 'www.swu-db.com', 'swu-db.com']);
       if (!allow.has(u.hostname)) {
@@ -16,7 +15,6 @@ export async function handler(event) {
       }
       targetUrl = u.toString();
     } else {
-      // API/CDN path mode
       const path = qs.path || '/cards/search';
       const base = path.startsWith('/images/') ? CDN_ORIGIN : API_ORIGIN;
       const u = new URL(base + path);
