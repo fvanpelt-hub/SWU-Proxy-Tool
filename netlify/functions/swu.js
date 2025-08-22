@@ -1,40 +1,48 @@
-// Netlify Function: swu proxy
-// Usage: /.netlify/functions/swu?path=/cards/search&q=name%3A%22luke%22
-// Also supports binary image passthrough: path like /cards/{set}/{num}?format=image
-export default async (request, context) => {
-  const url = new URL(request.url);
-  const path = url.searchParams.get('path') || '/';
-  // Rebuild target SWU-DB URL
-  const target = new URL(`https://api.swu-db.com${path}`);
-  // Forward all other query params except 'path'
-  for (const [k,v] of url.searchParams.entries()) {
-    if(k !== 'path') target.searchParams.set(k, v);
-  }
+// Enhanced SWU proxy: API + CDN + absolute URL passthrough (whitelist)
+const API_ORIGIN = 'https://api.swu-db.com';
+const CDN_ORIGIN = 'https://cdn.swu-db.com';
 
-  // Fetch upstream
-  const upstream = await fetch(target, {
-    method: 'GET',
-    headers: {
-      'accept': '*/*',
-      // Add a UA to be polite
-      'user-agent': 'swu-proxy-netlify/0.2 (+https://netlify.com)'
+export async function handler(event) {
+  try {
+    const qs = event.queryStringParameters || {};
+    let targetUrl;
+
+    if (qs.url) {
+      // Absolute URL passthrough (whitelisted hosts only)
+      const u = new URL(qs.url);
+      const allow = new Set(['api.swu-db.com', 'cdn.swu-db.com', 'www.swu-db.com', 'swu-db.com']);
+      if (!allow.has(u.hostname)) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Host not allowed' }) };
+      }
+      targetUrl = u.toString();
+    } else {
+      // API/CDN path mode
+      const path = qs.path || '/cards/search';
+      const base = path.startsWith('/images/') ? CDN_ORIGIN : API_ORIGIN;
+      const u = new URL(base + path);
+      for (const [k, v] of Object.entries(qs)) {
+        if (k !== 'path' && k !== 'url' && v != null) u.searchParams.set(k, v);
+      }
+      targetUrl = u.toString();
     }
-  });
 
-  // Clone headers & add CORS
-  const resHeaders = new Headers(upstream.headers);
-  resHeaders.set('access-control-allow-origin', '*');
-  resHeaders.set('access-control-allow-headers', '*');
-  resHeaders.set('access-control-allow-methods', 'GET, OPTIONS');
-  resHeaders.set('cache-control', 'public, max-age=600');
+    const upstream = await fetch(targetUrl, { redirect: 'follow' });
+    const contentType = upstream.headers.get('content-type') || '';
+    const arrayBuf = await upstream.arrayBuffer();
 
-  // Binary or JSON/text?
-  const ct = resHeaders.get('content-type') || '';
-  if (ct.includes('image/') || ct.includes('application/octet-stream')) {
-    const arrayBuffer = await upstream.arrayBuffer();
-    return new Response(arrayBuffer, { status: upstream.status, headers: resHeaders });
-  } else {
-    const text = await upstream.text();
-    return new Response(text, { status: upstream.status, headers: resHeaders });
+    const isImage = contentType.startsWith('image/') ||
+      /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(new URL(targetUrl).pathname);
+
+    return {
+      statusCode: upstream.status,
+      headers: {
+        'Content-Type': contentType || (isImage ? 'image/png' : 'application/json'),
+        'Cache-Control': 'public, max-age=3600',
+      },
+      body: isImage ? Buffer.from(arrayBuf).toString('base64') : Buffer.from(arrayBuf).toString('utf8'),
+      isBase64Encoded: isImage,
+    };
+  } catch (err) {
+    return { statusCode: 500, body: JSON.stringify({ error: String(err) }) };
   }
-};
+}

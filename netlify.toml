@@ -1,14 +1,9 @@
-# Netlify config for SWU proxy tool
 [build]
   publish = "."
   functions = "netlify/functions"
 
-[functions]
-  node_bundler = "esbuild"
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+# Back-compat for any old /functions/* links
+[[redirects]]
+  from = "/functions/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
