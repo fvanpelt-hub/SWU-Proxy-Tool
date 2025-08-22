@@ -1,4 +1,4 @@
-/* SWU Proxy Sheet Tool — robust client (v0.2.2) */
+/* SWU Proxy Sheet Tool — robust client (v0.2.3) */
 (() => {
   'use strict';
   console.log('[swu-sheet] script loaded');
@@ -15,6 +15,12 @@
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const mmToPx = (mm, dpi) => (mm / 25.4) * dpi;
   const inToPx  = (inch, dpi) => inch * dpi;
+
+  // Find a button by visible text as a fallback when IDs differ
+  function byBtnText(txt) {
+    return Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'))
+      .find(b => (b.textContent || b.value || '').trim().toLowerCase() === txt.toLowerCase()) || null;
+  }
 
   function SWU(path, params = {}) {
     const usp = new URLSearchParams({ path, ...params });
@@ -194,14 +200,20 @@
   function bind() {
     document.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => e.preventDefault()));
 
-    $('#btnSavePNG')?.addEventListener('click', (e) => {
+    // Buttons: prefer IDs, fallback to visible text
+    const parseBtn = document.getElementById('btnParse')      || byBtnText('Add from Pasted List');
+    const addBtn   = document.getElementById('btnAddSearch')  || byBtnText('Add');
+    const saveBtn  = document.getElementById('btnSavePNG')    || byBtnText('Export PNG');
+    const printBtn = document.getElementById('btnPrint')      || byBtnText('Print');
+
+    saveBtn && saveBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const a = document.createElement('a');
       a.href = ($('#sheet') || document.querySelector('canvas')).toDataURL('image/png');
       a.download = 'cards-sheet.png'; a.click();
     });
 
-    $('#btnPrint')?.addEventListener('click', (e) => {
+    printBtn && printBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const jsPDF = window.jspdf && window.jspdf.jsPDF;
       if (jsPDF) {
@@ -210,32 +222,36 @@
         const dataURL = ($('#sheet') || document.querySelector('canvas')).toDataURL('image/jpeg', 0.95);
         doc.addImage(dataURL, 'JPEG', 0, 0, PAGE_W_IN, PAGE_H_IN);
         doc.save('cards-sheet.pdf');
-      } else window.print();
+      } else {
+        window.print();
+      }
     });
 
-    $('#btnParse')?.addEventListener('click', async (e) => {
+    parseBtn && parseBtn.addEventListener('click', async (e) => {
       e.preventDefault();
-      const names = parseList($('#pasteList')?.value || '');
+      const area = document.getElementById('pasteList') || document.querySelector('textarea');
+      const names = (area?.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!names.length) { alert('Paste card names, one per line.'); return; }
-      state.names = names; await render();
+      state.names = names;
+      await render();
     });
 
-    $('#btnAddSearch')?.addEventListener('click', async (e) => {
+    addBtn && addBtn.addEventListener('click', async (e) => {
       e.preventDefault();
-      const n = ($('#searchBox')?.value || '').trim(); if (!n) return;
-      state.names.push(n); await render();
+      const box = document.getElementById('searchBox') || document.querySelector('input[type="text"]');
+      const n = (box?.value || '').trim();
+      if (!n) return;
+      state.names.push(n);
+      await render();
     });
 
-    $('#overlayFile')?.addEventListener('change', async (e) => {
+    document.getElementById('overlayFile')?.addEventListener('change', async (e) => {
       const f = e.target.files && e.target.files[0];
-      state.overlayBmp = await fileToBitmap(f); await render();
+      state.overlayBmp = await fileToBitmap(f);
+      await render();
     });
-
-    $('#overlayToggle')?.addEventListener('change', render);
-    $('#overlayOpacity')?.addEventListener('input', render);
-
-    $('#btnClearSheet')?.addEventListener('click', (e) => { e.preventDefault(); state.names = []; render(); });
-    $('#btnClearAll')?.addEventListener('click', (e) => { e.preventDefault(); state.names = []; const a = $('#pasteList'); if (a) a.value=''; render(); });
+    document.getElementById('overlayToggle')?.addEventListener('change', render);
+    document.getElementById('overlayOpacity')?.addEventListener('input', render);
 
     ['cardW','cardH','rows','cols','marginL','marginT','dpi','bleedMM'].forEach(id => {
       const el = document.getElementById(id);
