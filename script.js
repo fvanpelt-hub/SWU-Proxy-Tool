@@ -1,4 +1,4 @@
-/* SWU Proxy Sheet Tool — layout/overlay fix (v0.2.4) */
+/* SWU Proxy Sheet Tool — use user's SVG overlay (v0.2.5) */
 (() => {
   'use strict';
   console.log('[swu-sheet] script loaded');
@@ -96,21 +96,19 @@
   function parseList(text) { return (text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
 
   function chooseOrientation(dpi, cols, rows, cardW, cardH, mL, mT) {
-    // portrait 8.5x11, landscape 11x8.5 — auto-rotate if layout won't fit portrait
     const fitsPortrait  = (cols * cardW + 2 * mL <= 8.5) && (rows * cardH + 2 * mT <= 11);
     const fitsLandscape = (cols * cardW + 2 * mL <= 11)  && (rows * cardH + 2 * mT <= 8.5);
     return fitsPortrait ? { wIn: 8.5, hIn: 11, orient: 'portrait' }
          : fitsLandscape ? { wIn: 11, hIn: 8.5, orient: 'landscape' }
-         : { wIn: 8.5, hIn: 11, orient: 'portrait' }; // fallback
+         : { wIn: 11, hIn: 8.5, orient: 'landscape' }; // bias landscape for 2x4
   }
 
   function getGeom() {
     const dpi   = parseInt(($('#dpi')?.value || '300'), 10) || 300;
     const cardW = parseFloat($('#cardW')?.value || '2.5');
     const cardH = parseFloat($('#cardH')?.value || '3.5');
-    // If user left defaults (4x2), we won't swap, but auto-rotate will handle 2x4 via width check
-    const rows  = clamp(parseInt($('#rows')?.value || '2', 10), 1, 10); // default to 2 rows
-    const cols  = clamp(parseInt($('#cols')?.value || '4', 10), 1, 10); // default to 4 cols
+    const rows  = parseInt($('#rows')?.value || '2', 10);
+    const cols  = parseInt($('#cols')?.value || '4', 10);
     const mL    = parseFloat($('#marginL')?.value || '0.5');
     const mT    = parseFloat($('#marginT')?.value || '0.75');
     const bleed = parseFloat($('#bleedMM')?.value || '0.5');
@@ -125,7 +123,6 @@
     const startX = Math.round(inToPx(mL, dpi));
     const startY = Math.round(inToPx(mT, dpi));
 
-    // fixed grid (no auto gaps) to align with cutting templates
     const slots = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -135,6 +132,21 @@
       }
     }
     return { dpi, PAGE_W, PAGE_H, CW, CH, BL, rows, cols, slots, wIn, hIn, orient };
+  }
+
+  async function ensureUserSVGOverlay() {
+    if (state.overlayBmp) return;
+    const p = 'assets/letter_poker_v2_fixed.svg'; // <-- YOUR SVG
+    try {
+      const res = await fetch(p);
+      if (!res.ok) throw new Error(`Overlay not found: ${p}`);
+      const blob = await res.blob();
+      state.overlayBmp = await createImageBitmap(blob);
+      state.overlayPath = p;
+      console.log('[swu-sheet] overlay loaded:', p);
+    } catch (e) {
+      console.warn('[swu-sheet] overlay load failed', e);
+    }
   }
 
   function wrapText(ctx, text, x, y, mw, lh) {
@@ -152,28 +164,6 @@
     lines.forEach((ln, i) => ctx.fillText(ln, x, y + i * lh));
   }
 
-  async function ensureDefaultOverlay() {
-    if (state.overlayBmp) return;
-    const candidates = [
-      'assets/letter_poker_v2_fixed.svg',
-      'assets/template_landscape_3300x2550.png',
-      'assets/template_resized_1056x816.png'
-    ];
-    for (const p of candidates) {
-      try {
-        const res = await fetch(p);
-        if (res.ok) {
-          const blob = await res.blob();
-          const bmp = await createImageBitmap(blob);
-          state.overlayBmp = bmp;
-          state.overlayPath = p;
-          console.log('[swu-sheet] overlay loaded:', p);
-          break;
-        }
-      } catch {}
-    }
-  }
-
   async function render() {
     const geom = getGeom();
     const canvas = $('#sheet') || document.querySelector('canvas') || document.createElement('canvas');
@@ -182,13 +172,15 @@
     if (canvas.width !== geom.PAGE_W) canvas.width = geom.PAGE_W;
     if (canvas.height !== geom.PAGE_H) canvas.height = geom.PAGE_H;
 
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, geom.PAGE_W, geom.PAGE_H);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, geom.PAGE_W, geom.PAGE_H);
 
-    await ensureDefaultOverlay();
+    await ensureUserSVGOverlay();
     const overlayOn = $('#overlayToggle')?.checked ?? true;
     const overlayOpacity = parseFloat($('#overlayOpacity')?.value || '1');
     if (overlayOn && state.overlayBmp) {
-      ctx.save(); ctx.globalAlpha = clamp(overlayOpacity, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = clamp(overlayOpacity, 0, 1);
       ctx.drawImage(state.overlayBmp, 0, 0, geom.PAGE_W, geom.PAGE_H);
       ctx.restore();
     }
@@ -250,7 +242,7 @@
     parseBtn && parseBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       const area = $('#pasteList') || document.querySelector('textarea');
-      const names = parseList(area?.value || '');
+      const names = (area?.value || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       if (!names.length) { alert('Paste card names, one per line.'); return; }
       state.names = names; await render();
     });
@@ -258,13 +250,16 @@
     addBtn && addBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       const box = $('#searchBox') || document.querySelector('input[type="text"]');
-      const n = (box?.value || '').trim(); if (!n) return;
+      const n = (box?.value || '').trim();
+      if (!n) return;
       state.names.push(n); await render();
     });
 
     $('#overlayFile')?.addEventListener('change', async (e) => {
       const f = e.target.files && e.target.files[0];
-      state.overlayBmp = await fileToBitmap(f); state.overlayPath = f?.name || 'upload'; await render();
+      state.overlayBmp = await fileToBitmap(f);
+      state.overlayPath = f?.name || 'upload';
+      await render();
     });
     $('#overlayToggle')?.addEventListener('change', render);
     $('#overlayOpacity')?.addEventListener('input', render);
@@ -277,10 +272,8 @@
   }
 
   async function init() {
-    // Initialize defaults helpful for 2x4 on letter
     if ($('#rows')) $('#rows').value = $('#rows').value || '2';
     if ($('#cols')) $('#cols').value = $('#cols').value || '4';
-
     bind();
     try {
       const ping = await SWU('/catalog/card-names');
