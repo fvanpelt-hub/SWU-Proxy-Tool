@@ -2,7 +2,6 @@
   publish = "."
   functions = "netlify/functions"
 
-# Back-compat for any old /functions/* links
 [[redirects]]
   from = "/functions/*"
   to   = "/.netlify/functions/:splat"
