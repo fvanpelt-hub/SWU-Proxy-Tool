@@ -1,0 +1,3 @@
+
+/* Hide overlay section UI entirely */
+fieldset#overlay, section#overlay, .overlay, .overlay-panel { display: none !important; }

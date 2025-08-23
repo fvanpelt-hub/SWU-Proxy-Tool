@@ -1,10 +1,13 @@
-1) Replace your script reference to use script.v026f.js:
-   <script src="script.v026f.js" defer></script>
+Baked-in trim guides (no asset needed) + always-on drawing.
 
-2) (Optional) To hide the slider/checkbox entirely, include this after your main styles:
-   <link rel="stylesheet" href="hide-overlay-controls.css">
+1) Replace your script tag to use script.v026g.js
+   <script src="script.v026g.js" defer></script>
+
+2) (Optional) Hide the overlay section (checkbox/slider/file) completely:
+   <link rel="stylesheet" href="hide-overlay-section.css">
 
 Notes:
-- Overlay always renders ON TOP with opacity 1.
-- Default overlay is auto-loaded from assets/letter_poker_v2_fixed.svg if present.
-- You can still use the file chooser to replace the overlay at any time.
+- Guides are computed from your current sheet settings (rows/cols/card size/margins).
+- They draw ON TOP of the cards during render.
+- You can keep the file chooser if you still want to load a custom overlay image;
+  if present it will still be drawn by v026f logic, *plus* these guides.
