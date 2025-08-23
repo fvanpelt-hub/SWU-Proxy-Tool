@@ -1,48 +1,71 @@
-// netlify/functions/swu.js
-const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+// Netlify Function: SWU API/CDN proxy (v0.2.6c-hotfix)
+// - Uses native fetch (Node 18+) — no node-fetch import
+// - Forwards ALL query params (e.g., q=...) to the API
+// - Adds CORS headers and handles binary image passthrough
 
-exports.handler = async (event) => {
+export async function handler(event) {
+  const CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
+  };
+
   try {
-    const { queryStringParameters = {} } = event;
-    const path = queryStringParameters.path || '';
-    const url  = queryStringParameters.url || '';
-    const format = (queryStringParameters.format || '').toLowerCase();
-
-    const CORS = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
-    };
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 204, headers: CORS, body: '' };
+    if (event.httpMethod === "OPTIONS") {
+      return { statusCode: 204, headers: CORS, body: "" };
     }
 
+    const qs = event.queryStringParameters || {};
+    const path   = qs.path || "";
+    const url    = qs.url || "";
+    const format = (qs.format || "").toLowerCase();
+
+    // Forward all query params to the upstream, except our control params
+    const forward = new URLSearchParams(qs);
+    forward.delete("path");
+    forward.delete("url");
+    forward.delete("format");
+    const forwardQS = forward.toString();
+
+    // Direct URL passthrough (used for CDN images when needed)
     if (url) {
       const resp = await fetch(url);
-      const buf = await resp.buffer();
-      const ct = resp.headers.get('content-type') || 'application/octet-stream';
-      return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': ct }, body: buf.toString('base64'), isBase64Encoded: true };
+      const buf = Buffer.from(await resp.arrayBuffer());
+      const ct = resp.headers.get("content-type") || "application/octet-stream";
+      return {
+        statusCode: resp.status,
+        headers: { ...CORS, "Content-Type": ct },
+        body: buf.toString("base64"),
+        isBase64Encoded: true
+      };
     }
 
-    const API_BASE = 'https://api.swu-db.com';
-    const CDN_BASE = 'https://cdn.swu-db.com/images/cards';
+    const API_BASE = "https://api.swu-db.com";
+    const CDN_BASE = "https://cdn.swu-db.com/images/cards";
 
-    if (format === 'image' && path.startsWith('/cards/')) {
-      const parts = path.replace(/^\/cards\//, '').split('/');
-      const set = (parts[0] || '').toUpperCase();
-      const num = String(parts[1] || '').padStart(3, '0');
+    // Card image passthrough (set + number)
+    if (format === "image" && path.startsWith("/cards/")) {
+      const parts = path.replace(/^\/cards\//, "").split("/");
+      const set = (parts[0] || "").toUpperCase();
+      const num = String(parts[1] || "").padStart(3, "0");
       const cdn = `${CDN_BASE}/${set}/${num}.png`;
       const resp = await fetch(cdn);
-      const buf = await resp.buffer();
-      return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': 'image/png' }, body: buf.toString('base64'), isBase64Encoded: true };
+      const buf = Buffer.from(await resp.arrayBuffer());
+      return {
+        statusCode: resp.status,
+        headers: { ...CORS, "Content-Type": "image/png" },
+        body: buf.toString("base64"),
+        isBase64Encoded: true
+      };
     }
 
-    const target = `${API_BASE}${path || '/catalog/card-names'}`;
+    // Default: proxy to SWU-DB API with forwarded query string
+    const target = `${API_BASE}${path || "/catalog/card-names"}${forwardQS ? ("?" + forwardQS) : ""}`;
     const resp = await fetch(target);
     const text = await resp.text();
-    const ct = resp.headers.get('content-type') || 'application/json; charset=utf-8';
-    return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': ct }, body: text };
+    const ct = resp.headers.get("content-type") || "application/json; charset=utf-8";
+    return { statusCode: resp.status, headers: { ...CORS, "Content-Type": ct }, body: text };
   } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: String(err) }) };
+    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: String(err) }) };
   }
-};
+}
