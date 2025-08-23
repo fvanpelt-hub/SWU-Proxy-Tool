@@ -3,73 +3,85 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SW:U Proxy Sheet Tool</title>
+  <title>SW:Unlimited — Proxy Sheet Tool</title>
+  <link rel="icon" href="favicon.ico">
+  <!-- Keep existing SWU styles if you have them -->
   <link rel="stylesheet" href="styles.css">
+  <!-- Add the MTG skin override after, so it wins -->
+  <link rel="stylesheet" href="mtg-skin.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="script.v026c.js" defer></script>
 </head>
 <body>
   <header>
-    <h1>SW:U Proxy Sheet Tool</h1>
-    <div id="statusBar"></div>
+    <h1>SW:Unlimited — Proxy Sheet Tool</h1>
+    <nav class="nav">
+      <a href="https://mtgproxies.netlify.app/">← Magic Proxies</a>
+    </nav>
   </header>
-  <main>
-    <section class="toolbar">
-      <div class="row">
-        <label>Card Size (in)
-          <input id="cardW" type="number" step="0.01" value="2.5"> ×
-          <input id="cardH" type="number" step="0.01" value="3.5">
-        </label>
-        <label>DPI <input id="dpi" type="number" step="1" value="300"></label>
-        <label>Bleed (mm) <input id="bleedMM" type="number" step="0.1" value="0.5"></label>
-      </div>
-      <div class="row">
-        <label>Layout <input id="cols" type="number" step="1" value="4"> cols
-          <input id="rows" type="number" step="1" value="2"> rows
-        </label>
-        <label>Margins (in)
-          <input id="marginL" type="number" step="0.05" value="0.5">
-          <input id="marginT" type="number" step="0.05" value="0.75">
-        </label>
-      </div>
-      <div class="row">
+
+  <main class="layout">
+    <section class="left">
+      <div class="buttons">
         <button id="btnSavePNG">Export PNG</button>
         <button id="btnPrint">Print</button>
       </div>
-    </section>
 
-    <section class="overlays">
-      <h3>Overlays</h3>
+      <h3 style="margin-top:14px;">Add Cards</h3>
+      <textarea id="pasteList" rows="8" placeholder="One per line, e.g.&#10;Luke Skywalker&#10;Darth Vader&#10;Grogu"></textarea>
+      <div class="buttons">
+        <button id="btnParse">Add from Pasted List</button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input id="searchBox" type="text" placeholder="Search SWU card...">
+          <button id="btnAddSearch">Add</button>
+        </div>
+      </div>
+
+      <h3 style="margin-top:14px;">Overlay</h3>
       <label class="toggle">
         <input id="overlayToggle" type="checkbox" checked> Show
       </label>
       <input id="overlayOpacity" type="range" min="0" max="1" step="0.05" value="1">
       <input id="overlayFile" type="file" accept=".png,.jpg,.jpeg,.svg">
+
+      <details style="margin-top:10px;">
+        <summary>Sheet Settings</summary>
+        <div class="row">
+          <label>Card Size (in)
+            <input id="cardW" type="number" step="0.01" value="2.5"> ×
+            <input id="cardH" type="number" step="0.01" value="3.5">
+          </label>
+          <label>DPI <input id="dpi" type="number" step="1" value="300"></label>
+          <label>Bleed (mm) <input id="bleedMM" type="number" step="0.1" value="0.5"></label>
+        </div>
+        <div class="row">
+          <label>Layout <input id="cols" type="number" step="1" value="4"> cols
+            <input id="rows" type="number" step="1" value="2"> rows
+          </label>
+          <label>Margins (in)
+            <input id="marginL" type="number" step="0.05" value="0.5">
+            <input id="marginT" type="number" step="0.05" value="0.75">
+          </label>
+        </div>
+      </details>
+      <div id="statusBar" style="margin-top:8px; color:#9ca3af;"></div>
     </section>
 
-    <section class="adder">
-      <h3>Add Cards <small>(paste list, search, or upload images)</small></h3>
-      <textarea id="pasteList" rows="6" placeholder="Paste a deck list here"></textarea>
-      <div class="row">
-        <button id="btnParse">Add from Pasted List</button>
-        <input id="searchBox" type="text" placeholder="Search SWU card...">
-        <button id="btnAddSearch">Add</button>
+    <section class="right">
+      <div class="sheetNav">
+        <button id="prevSheet" aria-label="Previous sheet" disabled>◀</button>
+        <span id="sheetIndicator">Sheet 1 of 1</span>
+        <button id="nextSheet" aria-label="Next sheet" disabled>▶</button>
+        <select id="sheetJump" aria-label="Jump to sheet"></select>
       </div>
-      <div class="row">
-        <button id="btnUpload" disabled>Upload custom images</button>
-      </div>
-    </section>
 
-    <section class="sheetWrap">
-      <canvas id="sheet"></canvas>
+      <div class="thumbBar" id="thumbBar" aria-label="Sheet thumbnails" style="display:none;"></div>
+      <div class="sheetWrap"><canvas id="sheet"></canvas></div>
     </section>
   </main>
 
   <footer>
     <small>Card data & images proxied via a Netlify Function to the SWU-DB API. Personal use only.</small>
   </footer>
-
-<script src="script.v026c.js" defer></script>
-
 </body>
 </html>

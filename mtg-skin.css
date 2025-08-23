@@ -1,0 +1,28 @@
+/* MTG skin override for SWU page */
+:root { color-scheme: dark; --bg:#0f1419; --panel:#161c22; --text:#e6edf3; --muted:#9fb0c0; }
+html, body { background:var(--bg); color:var(--text); font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+header, footer, .left, .right { background:var(--panel); border-radius:12px; }
+header, footer { padding:16px; margin:10px auto; width:min(1200px, 96%); }
+h1 { margin:0; font-size:20px; }
+.nav { display:flex; gap:12px; margin-top:6px; }
+.nav a { color:var(--muted); text-decoration:none; font-weight:500; }
+.nav a:hover { color:var(--text); text-decoration:underline; }
+
+/* Two-column layout like MTG site */
+.layout { display:grid; grid-template-columns: 360px 1fr; gap:16px; width:min(1200px,96%); margin:10px auto; }
+.left, .right { padding:14px; }
+.buttons { display:flex; gap:10px; flex-wrap:wrap; }
+.row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+label { color:var(--muted); display:flex; gap:8px; align-items:center; }
+
+input, textarea, button, select { border-radius:8px; border:1px solid #2a3441; background:#0f1419; color:var(--text); padding:8px 10px; }
+button { background:#1e2937; cursor:pointer; }
+button:hover { background:#243244; }
+textarea { width:100%; resize:vertical; }
+
+.sheetNav { display:flex; gap:10px; align-items:center; margin-bottom:6px; }
+.sheetWrap { display:flex; justify-content:center; }
+canvas { background:#fff; width: min(1100px, 95vw); height:auto; box-shadow:0 4px 18px rgba(0,0,0,.35); border-radius:6px; }
+
+/* Overlay toggle */
+.toggle { display:inline-flex; gap:8px; align-items:center; }

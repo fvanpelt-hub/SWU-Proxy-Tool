@@ -1,11 +1,8 @@
-SWU Proxy Sheet Tool - Patch v0.2.6b
-------------------------------------
-*Fixes 'No SWU match' when names are lowercase/partial (e.g., 'luke skywalker').*
+SWU MTG-Skin Patch
+------------------
+Drop these files into the ROOT of your SWU site repo and deploy:
+- index.html (skinned & includes nav back to MTG)
+- mtg-skin.css (style overrides to match MTG site)
 
-- Case-insensitive search with catalog fallback.
-- Keeps overlay rendering + pasted-list improvements from v0.2.6a.
-
-Install:
-1) Replace your project's script.js with this file.
-2) Ensure index.html loads it as: <script src="script.js?v=0.2.6b" defer></script>
-3) Commit and push.
+If your SWU repo already has a custom index.html, compare and merge; the critical part
+is adding: `<link rel="stylesheet" href="mtg-skin.css">` and the `<nav>` element.
