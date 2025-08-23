@@ -1,0 +1,4 @@
+
+/* Hide overlay controls: always on */
+.toggle { display:none !important; }         /* label with the checkbox */
+#overlayOpacity { display:none !important; } /* slider */
