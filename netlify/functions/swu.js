@@ -17,7 +17,6 @@ exports.handler = async (event) => {
       return { statusCode: 204, headers: CORS, body: '' };
     }
 
-    // Direct proxy to arbitrary URL (safest way to bypass CORS for cdn.swu-db.com)
     if (url) {
       const resp = await fetch(url);
       const buf = await resp.buffer();
@@ -25,11 +24,9 @@ exports.handler = async (event) => {
       return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': ct }, body: buf.toString('base64'), isBase64Encoded: true };
     }
 
-    // API base
     const API_BASE = 'https://api.swu-db.com';
     const CDN_BASE = 'https://cdn.swu-db.com/images/cards';
 
-    // If asked for an image with /cards/<set>/<num>, build CDN URL directly
     if (format === 'image' && path.startsWith('/cards/')) {
       const parts = path.replace(/^\/cards\//, '').split('/');
       const set = (parts[0] || '').toUpperCase();
@@ -40,7 +37,6 @@ exports.handler = async (event) => {
       return { statusCode: resp.status, headers: { ...CORS, 'Content-Type': 'image/png' }, body: buf.toString('base64'), isBase64Encoded: true };
     }
 
-    // Otherwise proxy to API JSON
     const target = `${API_BASE}${path || '/catalog/card-names'}`;
     const resp = await fetch(target);
     const text = await resp.text();

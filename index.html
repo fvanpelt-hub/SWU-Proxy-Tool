@@ -3,17 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SW:Unlimited — Proxy Sheet Tool</title>
+  <title>SW:U Proxy Sheet Tool</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-  <script src="script.js?v=0.2.6a" defer></script>
+  <script src="script.v026c.js" defer></script>
 </head>
 <body>
   <header>
     <h1>SW:U Proxy Sheet Tool</h1>
     <div id="statusBar"></div>
   </header>
-
   <main>
     <section class="toolbar">
       <div class="row">
@@ -29,7 +28,7 @@
           <input id="rows" type="number" step="1" value="2"> rows
         </label>
         <label>Margins (in)
-          <input id="marginL" type="number" step="0.05" value="0.5"> 
+          <input id="marginL" type="number" step="0.05" value="0.5">
           <input id="marginT" type="number" step="0.05" value="0.75">
         </label>
       </div>
@@ -42,8 +41,7 @@
     <section class="overlays">
       <h3>Overlays</h3>
       <label class="toggle">
-        <input id="overlayToggle" type="checkbox" checked>
-        Show
+        <input id="overlayToggle" type="checkbox" checked> Show
       </label>
       <input id="overlayOpacity" type="range" min="0" max="1" step="0.05" value="1">
       <input id="overlayFile" type="file" accept=".png,.jpg,.jpeg,.svg">
@@ -51,7 +49,7 @@
 
     <section class="adder">
       <h3>Add Cards <small>(paste list, search, or upload images)</small></h3>
-      <textarea id="pasteList" rows="6" placeholder="Paste a deck list here (e.g., '3 Darth Vader — Dark Lord of the Sith' or 'Luke Skywalker (SOR 10) x2')"></textarea>
+      <textarea id="pasteList" rows="6" placeholder="Paste a deck list here"></textarea>
       <div class="row">
         <button id="btnParse">Add from Pasted List</button>
         <input id="searchBox" type="text" placeholder="Search SWU card...">
@@ -71,7 +69,7 @@
     <small>Card data & images proxied via a Netlify Function to the SWU-DB API. Personal use only.</small>
   </footer>
 
-<script src="script.js?v=0.2.6b" defer></script>
+<script src="script.v026c.js" defer></script>
 
 </body>
 </html>
