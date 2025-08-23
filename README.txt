@@ -1,13 +1,14 @@
-Baked-in trim guides (no asset needed) + always-on drawing.
+Bake-in overlay & underlay (auto-loaded on page load):
 
-1) Replace your script tag to use script.v026g.js
-   <script src="script.v026g.js" defer></script>
+- assets/template_resized_1056x816.png  -> drawn UNDER cards
+- assets/letter_poker_v2_fixed.svg      -> drawn OVER cards
 
-2) (Optional) Hide the overlay section (checkbox/slider/file) completely:
-   <link rel="stylesheet" href="hide-overlay-section.css">
+Steps:
+1) Drop 'script.v026h.js' and the 'assets/' folder into your site.
+2) Update index.html to use the new script:
+   <script src="script.v026h.js" defer></script>
+3) Deploy (push to Git or `netlify deploy --prod --dir=.`).
 
 Notes:
-- Guides are computed from your current sheet settings (rows/cols/card size/margins).
-- They draw ON TOP of the cards during render.
-- You can keep the file chooser if you still want to load a custom overlay image;
-  if present it will still be drawn by v026f logic, *plus* these guides.
+- Both images are auto-loaded on init; no user action required.
+- You can still use the file picker to replace either during a session.
