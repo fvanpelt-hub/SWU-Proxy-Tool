@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="3300" height="2550" viewBox="0 0 3300 2550" xmlns="http://www.w3.org/2000/svg">
-  <rect width="3300" height="2550" fill="none" stroke="#333" stroke-width="8"/>
-  <!-- 2x4 at 300dpi; 750x1050 each, margins 150 (L/R), 225 (T/B) -->
-  <g stroke="#4aa3ff" fill="none" stroke-width="3" opacity="0.9">
-    <!-- columns -->
-    <rect x="150" y="225" width="750" height="1050"/>
-    <rect x="900" y="225" width="750" height="1050"/>
-    <rect x="1650" y="225" width="750" height="1050"/>
-    <rect x="2400" y="225" width="750" height="1050"/>
-    <!-- second row -->
-    <rect x="150" y="1275" width="750" height="1050"/>
-    <rect x="900" y="1275" width="750" height="1050"/>
-    <rect x="1650" y="1275" width="750" height="1050"/>
-    <rect x="2400" y="1275" width="750" height="1050"/>
+  <g fill="#000000">
+    <!-- TL -->
+    <rect x="60" y="60" width="26" height="130"/>
+    <rect x="60" y="60" width="130" height="26"/>
+    <!-- TR -->
+    <rect x="3214" y="60" width="26" height="130"/>
+    <rect x="3144" y="60" width="96" height="26"/>
+    <!-- BL -->
+    <rect x="60" y="2360" width="26" height="130"/>
+    <rect x="60" y="2464" width="130" height="26"/>
+    <!-- BR -->
+    <rect x="3214" y="2360" width="26" height="130"/>
+    <rect x="3144" y="2464" width="96" height="26"/>
   </g>
 </svg>

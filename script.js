@@ -1,243 +1,199 @@
-/* SWU Silhouette Tool — MTG-style layout */
-(() => {
-  const W = 3300, H = 2550; // 11x8.5 @ 300dpi
-  const DPI = 300;
-  const COLS = 4, ROWS = 2;
-  const M_LR = 0.5 * DPI;  // 150
-  const M_TB = 0.75 * DPI; // 225
-  const CARD_W = 2.5 * DPI; // 750
-  const CARD_H = 3.5 * DPI; // 1050
-  const SLOT_X = (c) => M_LR + c * CARD_W;
-  const SLOT_Y = (r) => M_TB + r * CARD_H;
+// Silhouette Sheet Tool — SW:Unlimited
+// Letter landscape @300DPI = 3300×2550. 4×2 of 2.5×3.5 (750×1050).
+// Overlay (template PNG + SVG corners) is always drawn fully opaque.
 
-  // DOM
-  const canvas = document.getElementById('sheet');
-  const ctx = canvas.getContext('2d');
-  const deckEl = document.getElementById('deck');
-  const showGuidesEl = document.getElementById('showGuides');
-  const fileTemplateEl = document.getElementById('fileTemplate');
-  const statusEl = document.getElementById('status');
-  const pagerEl = document.getElementById('pager');
+const DPI = 300;
+const PAGE_W = 3300, PAGE_H = 2550;
+const CARD_W = Math.round(2.5*DPI); // 750
+const CARD_H = Math.round(3.5*DPI); // 1050
+const MARGIN = Math.round(0.5*DPI); // 150
+const COLS = 4, ROWS = 2;
+const COL_GAP = 0;
+const ROW_GAP = Math.round(0.5*DPI); // 150
 
-  const prevBtn = document.getElementById('prev');
-  const nextBtn = document.getElementById('next');
-  const btnBuild = document.getElementById('btnBuild');
-  const btnExport = document.getElementById('btnExport');
-  const btnPrint = document.getElementById('btnPrint');
+const canvas = document.getElementById('sheetCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
 
-  // built-in template
-  const bakedTemplateURL = 'assets/template_resized_1056x816.png';
-  let overlayImg = null;
-  let pages = [[]]; // array of arrays of {name, img}
+const showGuidesEl = document.getElementById('showGuides');
+const cardListEl = document.getElementById('cardList');
+const buildBtn = document.getElementById('buildBtn');
+const templateFileEl = document.getElementById('templateFile');
+const exportBtn = document.getElementById('exportPng');
+const printBtn = document.getElementById('printBtn');
+const prevSheet = document.getElementById('prevSheet');
+const nextSheet = document.getElementById('nextSheet');
+const sheetLabel = document.getElementById('sheetLabel');
 
-  // Helper: draw guides and overlay
-  async function drawGuides() {
-    // white page bg
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0,0,W,H);
+let bakedTemplate = null;   // optional PNG
+let svgCorners   = null;    // SVG cut path
+let pages = [[]];
+let pageIndex = 0;
 
-    if (showGuidesEl.checked) {
-      // soft outer box
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(M_LR, M_TB, W - 2*M_LR, H - 2*M_TB);
+init();
 
-      // grid lines
-      ctx.strokeStyle = 'rgba(64,150,255,0.7)';
-      for (let c=1;c<COLS;c++){
-        const x = SLOT_X(c);
-        ctx.beginPath(); ctx.moveTo(x, M_TB); ctx.lineTo(x, H-M_TB); ctx.stroke();
-      }
-      for (let r=1;r<ROWS;r++){
-        const y = SLOT_Y(r);
-        ctx.beginPath(); ctx.moveTo(M_LR, y); ctx.lineTo(W-M_LR, y); ctx.stroke();
-      }
+async function init(){
+  console.log('[swu-sheet] script loaded');
 
-      // overlay template
-      if (!overlayImg) {
-        overlayImg = await loadImage(bakedTemplateURL).catch(()=>null);
-      }
-      if (overlayImg) {
-        ctx.globalAlpha = 0.25;
-        ctx.drawImage(overlayImg, 0, 0, W, H);
-        ctx.globalAlpha = 1;
-      }
+  try { bakedTemplate = await loadImage('assets/template_resized_1056x816.png'); } catch(e){}
+  try { svgCorners   = await loadImage('assets/letter_poker_v2_fixed.svg'); } catch(e){}
+
+  await build();
+  console.log('[swu-sheet] init complete');
+}
+
+function positionsForPage(){
+  const slots = [];
+  const startX = MARGIN, startY = MARGIN;
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const x = startX + c*(CARD_W + COL_GAP);
+      const y = startY + r*(CARD_H + ROW_GAP);
+      slots.push({x,y,w:CARD_W,h:CARD_H});
     }
   }
+  return slots;
+}
 
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
-    });
+function parseList(text){
+  return (text||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean).flatMap(line=>{
+    const m = line.match(/^(.*)\s+x(\d+)$/i);
+    if(m){ return Array.from({length:Math.max(1,parseInt(m[2],10))},()=>m[1].trim()); }
+    return [line];
+  });
+}
+
+async function fetchJSON(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return await res.json();
+}
+
+function proxiedImage(rawUrl){
+  return loadImage('/.netlify/functions/swu?img='+encodeURIComponent(rawUrl));
+}
+
+async function resolveByName(name){
+  // primary search
+  try{
+    const q = encodeURIComponent(`name:"${name}"`);
+    const data = await fetchJSON(`/.netlify/functions/swu?path=%2Fcards%2Fsearch&q=${q}`);
+    if(data?.data?.length){
+      const hit = data.data[0];
+      const art = hit.FrontArt || hit.Front || hit.front || hit.image;
+      if(art) return proxiedImage(art);
+    }
+  }catch(e){ console.warn('search failed', e); }
+
+  // fallback via catalog
+  try{
+    const list = await fetchJSON('/.netlify/functions/swu?path=%2Fcatalog%2Fcard-names');
+    const names = list?.data || [];
+    const best = names.find(n=>n.toLowerCase()===name.toLowerCase()) ||
+                 names.find(n=>n.toLowerCase().includes(name.toLowerCase()));
+    if(best){
+      const q = encodeURIComponent(`name:"${best}"`);
+      const data = await fetchJSON(`/.netlify/functions/swu?path=%2Fcards%2Fsearch&q=${q}`);
+      const art = data?.data?.[0]?.FrontArt;
+      if(art) return proxiedImage(art);
+    }
+  }catch(e){ console.warn('catalog fallback failed', e); }
+
+  return null;
+}
+
+async function build(){
+  buildBtn.disabled = true;
+  try{
+    const names = parseList(cardListEl.value);
+    const imgs = [];
+    for(const nm of names){
+      const img = await resolveByName(nm);
+      imgs.push({name:nm, img});
+    }
+    pages = [];
+    for(let i=0;i<imgs.length;i+=8) pages.push(imgs.slice(i,i+8));
+    if(pages.length===0) pages=[[]];
+    pageIndex = 0;
+    render();
+  }finally{
+    buildBtn.disabled = false;
   }
+}
 
-  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function clearCanvas(){
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,PAGE_W,PAGE_H);
+}
 
-  async function fetchJSON(path, params={}) {
-    const url = new URL('/.netlify/functions/swu', location.origin);
-    url.searchParams.set('path', path);
-    for (const [k,v] of Object.entries(params)) url.searchParams.set(k,v);
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`proxy ${res.status}`);
-    return await res.json();
+function drawTemplate(){
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  if(bakedTemplate) ctx.drawImage(bakedTemplate, 0,0, PAGE_W, PAGE_H);
+  if(svgCorners)   ctx.drawImage(svgCorners,   0,0, PAGE_W, PAGE_H);
+  ctx.restore();
+}
+
+function drawGuides(){
+  if(!showGuidesEl.checked) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(60,130,255,.6)';
+  ctx.lineWidth = 2;
+  for(const s of positionsForPage()){
+    ctx.strokeRect(s.x, s.y, s.w, s.h);
   }
+  ctx.strokeRect(0.5,0.5,PAGE_W-1,PAGE_H-1);
+  ctx.restore();
+}
 
-  async function proxyImage(url) {
-    const fn = new URL('/.netlify/functions/swu', location.origin);
-    fn.searchParams.set('proxy', url);
-    const res = await fetch(fn.toString());
-    if (!res.ok) throw new Error(`img proxy ${res.status}`);
-    const blob = await res.blob();
-    return await createImageBitmap(blob);
-  }
-
-  function parseDeckLines(text) {
-    const out = [];
-    text.split(/\r?\n/).map(s => s.trim()).filter(Boolean).forEach(line => {
-      // parse optional " xN"
-      let m = line.match(/(.+?)\s+x(\d+)$/i);
-      if (m) {
-        const name = m[1].trim();
-        const n = Math.max(1, parseInt(m[2],10));
-        for (let i=0;i<n;i++) out.push(name);
-      } else {
-        out.push(line);
-      }
-    });
-    return out;
-  }
-
-  async function resolveByName(name) {
-    try {
-      // Search API
-      const q = `name:"${name}"`;
-      const data = await fetchJSON('/cards/search', { q });
-      const arr = (data && (data.data || data)) || [];
-      if (arr.length) {
-        const card = arr[0];
-        const imgUrl = (card.FrontArt || card.frontArt || card.image || '').replace(/^http:/,'https:');
-        if (imgUrl) {
-          const bmp = await proxyImage(imgUrl);
-          return bmp;
-        }
-        // fallback try to derive CDN path from Set + Number (3 digits)
-        const set = (card.Set || card.set || '').toString().toUpperCase();
-        let num = (card.Number || card.number || '').toString().padStart(3,'0');
-        if (set && num) {
-          const cdn = `https://cdn.swu-db.com/images/cards/${set}/${num}.png`;
-          const bmp = await proxyImage(cdn);
-          return bmp;
-        }
-      }
-      throw new Error('No SWU match');
-    } catch (e) {
-      console.log('[swu] resolve fail', name, e);
-      return null;
+function render(){
+  clearCanvas();
+  drawTemplate();
+  const slots = positionsForPage();
+  const page = pages[pageIndex] || [];
+  for(let i=0;i<Math.min(8, slots.length); i++){
+    const s = slots[i];
+    const item = page[i];
+    if(!item) continue;
+    if(item.img) ctx.drawImage(item.img, s.x, s.y, s.w, s.h);
+    else{
+      ctx.fillStyle='rgba(255,0,0,0.14)'; ctx.fillRect(s.x,s.y,s.w,s.h);
+      ctx.fillStyle='#b00'; ctx.font='18px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial';
+      ctx.fillText('Failed:', s.x+6, s.y+22);
+      ctx.fillStyle='#c99'; ctx.fillText(item.name, s.x+6, s.y+42);
     }
   }
+  drawGuides();
+  sheetLabel.textContent = `Sheet ${pageIndex+1} of ${pages.length}`;
+}
 
-  async function renderPage(pageIndex=0) {
-    await drawGuides();
-    const list = pages[pageIndex] || [];
-    let i = 0;
-    for (let r=0;r<ROWS;r++) {
-      for (let c=0;c<COLS;c++) {
-        if (i >= list.length) return;
-        const slot = list[i++];
-        const x = SLOT_X(c), y = SLOT_Y(r);
-        if (slot.img) {
-          // fit image to card
-          ctx.drawImage(slot.img, x, y, CARD_W, CARD_H);
-        } else {
-          // failed placeholder
-          ctx.fillStyle = 'rgba(255,0,0,0.08)';
-          ctx.fillRect(x, y, CARD_W, CARD_H);
-          ctx.fillStyle = '#c33';
-          ctx.font = '22px system-ui,Segoe UI,Roboto';
-          ctx.fillText('Failed:', x+10, y+28);
-          ctx.fillText(slot.name, x+10, y+52);
-        }
-      }
-    }
-  }
-
-  function paginate(items) {
-    const perPage = COLS*ROWS;
-    const pages = [];
-    for (let i=0;i<items.length;i+=perPage) pages.push(items.slice(i, i+perPage));
-    return pages.length ? pages : [[]];
-  }
-
-  async function buildSheets() {
-    try {
-      status('Resolving names…');
-      const names = parseDeckLines(deckEl.value);
-      const resolved = [];
-      for (const name of names) {
-        const img = await resolveByName(name);
-        resolved.push({ name, img });
-        await sleep(10);
-      }
-      pages = paginate(resolved);
-      state.page = 0;
-      pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
-      status('Done.');
-      await renderPage(0);
-    } catch (e) {
-      status('Error building sheets. See console.');
-      console.error(e);
-    }
-  }
-
-  function status(msg){ statusEl.textContent = msg; }
-
-  const state = { page: 0 };
-
-  prevBtn.addEventListener('click', async () => {
-    state.page = Math.max(0, state.page-1);
-    pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
-    await renderPage(state.page);
+function loadImage(srcOrBlob){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = reject;
+    img.crossOrigin = 'anonymous';
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.src = srcOrBlob instanceof Blob ? URL.createObjectURL(srcOrBlob) : srcOrBlob;
   });
-  nextBtn.addEventListener('click', async () => {
-    state.page = Math.min(pages.length-1, state.page+1);
-    pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
-    await renderPage(state.page);
-  });
-  btnBuild.addEventListener('click', buildSheets);
-  showGuidesEl.addEventListener('change', () => renderPage(state.page));
+}
 
-  fileTemplateEl.addEventListener('change', async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const url = URL.createObjectURL(f);
-    overlayImg = await loadImage(url).catch(()=>null);
-    await renderPage(state.page);
-  });
-
-  btnExport.addEventListener('click', async () => {
-    const png = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = png; a.download = 'swu-sheet.png';
-    a.click();
-  });
-
-  btnPrint.addEventListener('click', async () => {
-    window.print();
-  });
-
-  // initial
-  (async () => {
-    await drawGuides();
-    // Preload card names through proxy (useful for typeahead in the future)
-    try {
-      const names = await fetchJSON('/catalog/card-names');
-      console.log('[swu] card names loaded', names?.values?.length || names?.length || 0);
-    } catch (e) {
-      console.warn('[swu] names failed', e);
-    }
-  })();
-})();
+// events
+buildBtn.addEventListener('click', build);
+showGuidesEl.addEventListener('change', render);
+templateFileEl.addEventListener('change', async (e)=>{
+  const f = e.target.files?.[0];
+  if(f){ bakedTemplate = await loadImage(f); render(); }
+});
+exportBtn.addEventListener('click', ()=>{
+  const a = document.createElement('a');
+  a.download = `swu-sheet_${pageIndex+1}of${pages.length}.png`;
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+});
+printBtn.addEventListener('click', ()=> window.print());
+prevSheet.addEventListener('click', ()=>{ if(pageIndex>0){ pageIndex--; render(); } });
+nextSheet.addEventListener('click', ()=>{ if(pageIndex<pages.length-1){ pageIndex++; render(); } });
