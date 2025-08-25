@@ -1,60 +1,59 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Silhouette Sheet Tool — SW:Unlimited</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SW:Unlimited — Proxy Sheet Tool</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>Silhouette Sheet Tool</h1>
+    <div class="brand">Silhouette Sheet Tool</div>
     <div class="actions">
-      <button id="btnExportPNG">Export PNG</button>
-      <button id="btnPrint">Print</button>
+      <button id="btnExport" class="btn">Export PNG</button>
+      <button id="btnPrint" class="btn btn-primary">Print</button>
     </div>
   </header>
 
-  <main class="page">
-    <aside class="left">
-      <div class="block">
-        <label class="lbl">Template Image (optional):</label>
-        <input id="fileTemplate" type="file" accept="image/*,image/svg+xml">
-      </div>
+  <main class="layout">
+    <aside class="panel no-print">
+      <section class="field">
+        <label>Template Image (optional):</label>
+        <input type="file" id="templateFile" accept="image/*" />
+        <div class="hint">A baked-in template is used by default.</div>
+      </section>
 
-      <div class="block">
-        <label class="lbl">Card list (one per line, optional "xN" quantity):</label>
-        <textarea id="cardList" spellcheck="false" placeholder="Luke Skywalker
+      <section class="field">
+        <label>Card list (one per line, optional "xN" quantity):</label>
+        <textarea id="cardList" rows="12">Luke Skywalker
 Darth Vader
-Grogu"></textarea>
-      </div>
+Grogu
+Mandalorian</textarea>
+      </section>
 
-      <div class="block check">
-        <label><input id="chkGuides" type="checkbox" checked> Show trim guides (preview only)</label>
-      </div>
+      <section class="field checkbox">
+        <input type="checkbox" id="showGuides" checked />
+        <label for="showGuides">Show trim guides (preview only)</label>
+      </section>
 
-      <div class="block">
-        <button id="btnBuild">Build Sheets</button>
-      </div>
-
-      <div class="block small">
-        <div>Tip: 2.5×3.5 in @ 300 DPI, 4×2 layout per sheet.</div>
-      </div>
+      <section class="field">
+        <button id="btnBuild" class="btn btn-primary">Build Sheets</button>
+        <div id="status" class="status">Ready.</div>
+      </section>
     </aside>
 
-    <section class="right">
+    <section class="stage">
       <div class="sheetbar">
-        <button id="sheetPrev" title="Prev">◀</button>
+        <button id="prevSheet" class="btn small">◀</button>
         <span id="sheetLabel">Sheet 1 of 1</span>
-        <button id="sheetNext" title="Next">▶</button>
+        <button id="nextSheet" class="btn small">▶</button>
       </div>
-      <div class="canvasWrap">
-        <canvas id="canvas" width="3300" height="2550"></canvas>
+      <div class="canvas-wrap">
+        <canvas id="sheet" width="3300" height="2550"></canvas>
       </div>
-      <div id="statusBar" class="status">Ready.</div>
     </section>
   </main>
 
-  <script src="script.swu.mtgui.v2.js" defer></script>
+  <script src="script.js"></script>
 </body>
 </html>
