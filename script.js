@@ -1,1 +1,243 @@
-(()=>{const DPI=300,W=3300,H=2550,COLS=4,ROWS=2,CARD_W=750,CARD_H=1050,MARGIN_X=150,MARGIN_Y=225,FN_BASE='/.netlify/functions/swu';const $=id=>document.getElementById(id);const canvas=$('sheet'),ctx=canvas.getContext('2d'),cardList=$('cardList'),showGuides=$('showGuides'),status=$('status'),sheetLabel=$('sheetLabel'),btnBuild=$('btnBuild'),btnExport=$('btnExport'),btnPrint=$('btnPrint'),prev=$('prevSheet'),next=$('nextSheet'),templateFile=$('templateFile');let pages=[[]],pageIdx=0,bakedTemplate=null,userTemplate=null;function log(s){status.textContent=s}function slots(){const aW=W-2*MARGIN_X,aH=H-2*MARGIN_Y,gx=(aW-COLS*CARD_W)/(COLS-1),gy=(aH-ROWS*CARD_H)/(ROWS-1),r=[];for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)r.push({x:Math.round(MARGIN_X+x*(CARD_W+gx)),y:Math.round(MARGIN_Y+y*(CARD_H+gy)),w:CARD_W,h:CARD_H});return r}function clear(){ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H)}function drawTemplate(){const i=userTemplate||bakedTemplate;if(i)ctx.drawImage(i,0,0,W,H)}function drawGuides(){if(!showGuides.checked)return;ctx.save();ctx.strokeStyle='rgba(59,130,246,.6)';ctx.lineWidth=3;for(const r of slots())ctx.strokeRect(r.x,r.y,r.w,r.h);ctx.restore()}function cover(img,r){const s=Math.min(r.w/img.width,r.h/img.height),dw=img.width*s,dh=img.height*s,dx=r.x+(r.w-dw)/2,dy=r.y+(r.h-dh)/2;ctx.drawImage(img,dx,dy,dw,dh)}function render(){clear();drawTemplate();const rects=slots(),imgs=pages[pageIdx]||[];for(let i=0;i<Math.min(rects.length,imgs.length);i++)cover(imgs[i],rects[i]);drawGuides();sheetLabel.textContent=`Sheet ${pageIdx+1} of ${pages.length}`}async function loadImage(src){const img=new Image();img.crossOrigin='anonymous';img.src=src;await img.decode();return img}async function resolveURL(name){const q=encodeURIComponent(`name:"${name}"`),u=`${FN_BASE}?path=/cards/search&q=${q}`,res=await fetch(u);if(!res.ok)throw new Error('proxy search failed');const data=await res.json(),hit=(data?.data||[])[0];if(!hit)throw new Error('no match');if(hit.FrontArt)return hit.FrontArt;if(hit.Set&&hit.Number)return `${FN_BASE}?path=/cards/${encodeURIComponent(String(hit.Set).toLowerCase())}/${encodeURIComponent(hit.Number)}&format=image`;throw new Error('no image')}function parseList(t){return(t||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean).flatMap(l=>{const m=l.match(/^(.*?)(?:\s+x(\d+))?$/i),n=(m?.[1]||l).trim(),q=Math.max(1,parseInt(m?.[2]||'1',10));return Array(q).fill(n)})}async function build(){log('Building…');const names=parseList(cardList.value),per=COLS*ROWS,chunks=[];for(let i=0;i<names.length;i+=per)chunks.push(names.slice(i,i+per));pages=[];for(const chunk of chunks){const imgs=[];for(const name of chunk){try{const url=await resolveURL(name);imgs.push(await loadImage(url))}catch(e){const ph=document.createElement('canvas');ph.width=CARD_W;ph.height=CARD_H;const c=ph.getContext('2d');c.fillStyle='#fee2e2';c.fillRect(0,0,ph.width,ph.height);c.fillStyle='#991b1b';c.font='28px system-ui,Segoe UI,Roboto';c.fillText('Failed:',16,36);c.font='24px system-ui,Segoe UI,Roboto';c.fillText(name,16,66);imgs.push(ph)}render()}pages.push(imgs)}if(!pages.length)pages=[[]];pageIdx=0;render();log('Done.')}btnBuild.addEventListener('click',build);btnExport.addEventListener('click',()=>{canvas.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`swu_sheet_${pageIdx+1}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),3e3)})});btnPrint.addEventListener('click',()=>window.print());prev.addEventListener('click',()=>{if(pageIdx>0){pageIdx--;render()}});next.addEventListener('click',()=>{if(pageIdx<pages.length-1){pageIdx++;render()}});showGuides.addEventListener('change',render);templateFile.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f){userTemplate=null;return render()}const u=URL.createObjectURL(f),img=new Image();img.src=u;await img.decode();userTemplate=img;URL.revokeObjectURL(u);render()});(async()=>{canvas.width=W;canvas.height=H;try{bakedTemplate=await loadImage('assets/template_resized_1056x816.png')}catch{bakedTemplate=null}render()})()})();
+/* SWU Silhouette Tool — MTG-style layout */
+(() => {
+  const W = 3300, H = 2550; // 11x8.5 @ 300dpi
+  const DPI = 300;
+  const COLS = 4, ROWS = 2;
+  const M_LR = 0.5 * DPI;  // 150
+  const M_TB = 0.75 * DPI; // 225
+  const CARD_W = 2.5 * DPI; // 750
+  const CARD_H = 3.5 * DPI; // 1050
+  const SLOT_X = (c) => M_LR + c * CARD_W;
+  const SLOT_Y = (r) => M_TB + r * CARD_H;
+
+  // DOM
+  const canvas = document.getElementById('sheet');
+  const ctx = canvas.getContext('2d');
+  const deckEl = document.getElementById('deck');
+  const showGuidesEl = document.getElementById('showGuides');
+  const fileTemplateEl = document.getElementById('fileTemplate');
+  const statusEl = document.getElementById('status');
+  const pagerEl = document.getElementById('pager');
+
+  const prevBtn = document.getElementById('prev');
+  const nextBtn = document.getElementById('next');
+  const btnBuild = document.getElementById('btnBuild');
+  const btnExport = document.getElementById('btnExport');
+  const btnPrint = document.getElementById('btnPrint');
+
+  // built-in template
+  const bakedTemplateURL = 'assets/template_resized_1056x816.png';
+  let overlayImg = null;
+  let pages = [[]]; // array of arrays of {name, img}
+
+  // Helper: draw guides and overlay
+  async function drawGuides() {
+    // white page bg
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,W,H);
+
+    if (showGuidesEl.checked) {
+      // soft outer box
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(M_LR, M_TB, W - 2*M_LR, H - 2*M_TB);
+
+      // grid lines
+      ctx.strokeStyle = 'rgba(64,150,255,0.7)';
+      for (let c=1;c<COLS;c++){
+        const x = SLOT_X(c);
+        ctx.beginPath(); ctx.moveTo(x, M_TB); ctx.lineTo(x, H-M_TB); ctx.stroke();
+      }
+      for (let r=1;r<ROWS;r++){
+        const y = SLOT_Y(r);
+        ctx.beginPath(); ctx.moveTo(M_LR, y); ctx.lineTo(W-M_LR, y); ctx.stroke();
+      }
+
+      // overlay template
+      if (!overlayImg) {
+        overlayImg = await loadImage(bakedTemplateURL).catch(()=>null);
+      }
+      if (overlayImg) {
+        ctx.globalAlpha = 0.25;
+        ctx.drawImage(overlayImg, 0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  async function fetchJSON(path, params={}) {
+    const url = new URL('/.netlify/functions/swu', location.origin);
+    url.searchParams.set('path', path);
+    for (const [k,v] of Object.entries(params)) url.searchParams.set(k,v);
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`proxy ${res.status}`);
+    return await res.json();
+  }
+
+  async function proxyImage(url) {
+    const fn = new URL('/.netlify/functions/swu', location.origin);
+    fn.searchParams.set('proxy', url);
+    const res = await fetch(fn.toString());
+    if (!res.ok) throw new Error(`img proxy ${res.status}`);
+    const blob = await res.blob();
+    return await createImageBitmap(blob);
+  }
+
+  function parseDeckLines(text) {
+    const out = [];
+    text.split(/\r?\n/).map(s => s.trim()).filter(Boolean).forEach(line => {
+      // parse optional " xN"
+      let m = line.match(/(.+?)\s+x(\d+)$/i);
+      if (m) {
+        const name = m[1].trim();
+        const n = Math.max(1, parseInt(m[2],10));
+        for (let i=0;i<n;i++) out.push(name);
+      } else {
+        out.push(line);
+      }
+    });
+    return out;
+  }
+
+  async function resolveByName(name) {
+    try {
+      // Search API
+      const q = `name:"${name}"`;
+      const data = await fetchJSON('/cards/search', { q });
+      const arr = (data && (data.data || data)) || [];
+      if (arr.length) {
+        const card = arr[0];
+        const imgUrl = (card.FrontArt || card.frontArt || card.image || '').replace(/^http:/,'https:');
+        if (imgUrl) {
+          const bmp = await proxyImage(imgUrl);
+          return bmp;
+        }
+        // fallback try to derive CDN path from Set + Number (3 digits)
+        const set = (card.Set || card.set || '').toString().toUpperCase();
+        let num = (card.Number || card.number || '').toString().padStart(3,'0');
+        if (set && num) {
+          const cdn = `https://cdn.swu-db.com/images/cards/${set}/${num}.png`;
+          const bmp = await proxyImage(cdn);
+          return bmp;
+        }
+      }
+      throw new Error('No SWU match');
+    } catch (e) {
+      console.log('[swu] resolve fail', name, e);
+      return null;
+    }
+  }
+
+  async function renderPage(pageIndex=0) {
+    await drawGuides();
+    const list = pages[pageIndex] || [];
+    let i = 0;
+    for (let r=0;r<ROWS;r++) {
+      for (let c=0;c<COLS;c++) {
+        if (i >= list.length) return;
+        const slot = list[i++];
+        const x = SLOT_X(c), y = SLOT_Y(r);
+        if (slot.img) {
+          // fit image to card
+          ctx.drawImage(slot.img, x, y, CARD_W, CARD_H);
+        } else {
+          // failed placeholder
+          ctx.fillStyle = 'rgba(255,0,0,0.08)';
+          ctx.fillRect(x, y, CARD_W, CARD_H);
+          ctx.fillStyle = '#c33';
+          ctx.font = '22px system-ui,Segoe UI,Roboto';
+          ctx.fillText('Failed:', x+10, y+28);
+          ctx.fillText(slot.name, x+10, y+52);
+        }
+      }
+    }
+  }
+
+  function paginate(items) {
+    const perPage = COLS*ROWS;
+    const pages = [];
+    for (let i=0;i<items.length;i+=perPage) pages.push(items.slice(i, i+perPage));
+    return pages.length ? pages : [[]];
+  }
+
+  async function buildSheets() {
+    try {
+      status('Resolving names…');
+      const names = parseDeckLines(deckEl.value);
+      const resolved = [];
+      for (const name of names) {
+        const img = await resolveByName(name);
+        resolved.push({ name, img });
+        await sleep(10);
+      }
+      pages = paginate(resolved);
+      state.page = 0;
+      pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
+      status('Done.');
+      await renderPage(0);
+    } catch (e) {
+      status('Error building sheets. See console.');
+      console.error(e);
+    }
+  }
+
+  function status(msg){ statusEl.textContent = msg; }
+
+  const state = { page: 0 };
+
+  prevBtn.addEventListener('click', async () => {
+    state.page = Math.max(0, state.page-1);
+    pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
+    await renderPage(state.page);
+  });
+  nextBtn.addEventListener('click', async () => {
+    state.page = Math.min(pages.length-1, state.page+1);
+    pagerEl.textContent = `Sheet ${state.page+1} of ${pages.length}`;
+    await renderPage(state.page);
+  });
+  btnBuild.addEventListener('click', buildSheets);
+  showGuidesEl.addEventListener('change', () => renderPage(state.page));
+
+  fileTemplateEl.addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    overlayImg = await loadImage(url).catch(()=>null);
+    await renderPage(state.page);
+  });
+
+  btnExport.addEventListener('click', async () => {
+    const png = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = png; a.download = 'swu-sheet.png';
+    a.click();
+  });
+
+  btnPrint.addEventListener('click', async () => {
+    window.print();
+  });
+
+  // initial
+  (async () => {
+    await drawGuides();
+    // Preload card names through proxy (useful for typeahead in the future)
+    try {
+      const names = await fetchJSON('/catalog/card-names');
+      console.log('[swu] card names loaded', names?.values?.length || names?.length || 0);
+    } catch (e) {
+      console.warn('[swu] names failed', e);
+    }
+  })();
+})();

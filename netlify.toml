@@ -1,11 +1,11 @@
 [build]
-  publish = "."
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/functions/swu"
-  to = "/.netlify/functions/swu"
-  status = 200
+# Ensure clean print / caching
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"

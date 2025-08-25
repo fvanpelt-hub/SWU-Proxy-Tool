@@ -1,72 +1,67 @@
-// Netlify Function: SWU API/CDN proxy (v0.2.6d, CommonJS)
-// - Compatible with CommonJS runtime on Netlify
-// - Forwards ALL query params to SWU-DB API
-// - Uses global fetch (Node 18). If your runtime is older, set Functions runtime to Node 18 in Netlify.
-
-exports.handler = async (event) => {
-  const CORS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
-  };
-
+exports.handler = async function(event, context) {
   try {
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 204, headers: CORS, body: "" };
-    }
+    const url = new URL(event.rawUrl);
+    const path = url.searchParams.get('path');
+    const proxy = url.searchParams.get('proxy');
+    const q = url.searchParams.get('q');
 
-    const qs = event.queryStringParameters || {};
-    const path   = qs.path || "";
-    const url    = qs.url || "";
-    const format = (qs.format || "").toLowerCase();
+    const send = (body, status=200, headers={}) => ({
+      statusCode: status,
+      headers: Object.assign({
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
+      }, headers),
+      body,
+      isBase64Encoded: false
+    });
 
-    // Forward all additional query params (e.g., q=...)
-    const forward = new URLSearchParams(qs);
-    forward.delete("path");
-    forward.delete("url");
-    forward.delete("format");
-    const forwardQS = forward.toString();
-
-    // Direct URL passthrough (for CDN images, etc.)
-    if (url) {
-      const resp = await fetch(url);
-      const buf = Buffer.from(await resp.arrayBuffer());
-      const ct = resp.headers.get("content-type") || "application/octet-stream";
+    if (proxy) {
+      const resp = await fetch(proxy);
+      const arr = new Uint8Array(await resp.arrayBuffer());
+      const b64 = Buffer.from(arr).toString('base64');
       return {
         statusCode: resp.status,
-        headers: { ...CORS, "Content-Type": ct },
-        body: buf.toString("base64"),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': resp.headers.get('content-type') || 'application/octet-stream',
+          'Cache-Control': 'public, max-age=86400'
+        },
+        body: b64,
         isBase64Encoded: true
       };
     }
 
-    const API_BASE = "https://api.swu-db.com";
-    const CDN_BASE = "https://cdn.swu-db.com/images/cards";
+    if (!path) return send(JSON.stringify({ error: 'missing path' }), 400, { 'Content-Type': 'application/json' });
 
-    // Card image passthrough (set/number -> PNG)
-    if (format === "image" && path.startsWith("/cards/")) {
-      const parts = path.replace(/^\/cards\//, "").split("/");
-      const set = (parts[0] || "").toUpperCase();
-      const num = String(parts[1] || "").padStart(3, "0");
-      const cdn = `${CDN_BASE}/${set}/${num}.png`;
-      const resp = await fetch(cdn);
-      const buf = Buffer.from(await resp.arrayBuffer());
+    let upstream;
+    if (path.startsWith('/images/')) {
+      upstream = `https://cdn.swu-db.com${path}`;
+      const resp = await fetch(upstream);
+      const arr = new Uint8Array(await resp.arrayBuffer());
+      const b64 = Buffer.from(arr).toString('base64');
       return {
         statusCode: resp.status,
-        headers: { ...CORS, "Content-Type": "image/png" },
-        body: buf.toString("base64"),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': resp.headers.get('content-type') || 'image/png',
+          'Cache-Control': 'public, max-age=86400'
+        },
+        body: b64,
         isBase64Encoded: true
       };
+    } else {
+      // API
+      const api = new URL(`https://api.swu-db.com${path}`);
+      if (q) api.searchParams.set('q', q);
+      const resp = await fetch(api.toString());
+      const text = await resp.text();
+      return send(text, resp.status, { 'Content-Type': resp.headers.get('content-type') || 'application/json' });
     }
-
-    // Default: API proxy
-    const target = `${API_BASE}${path || "/catalog/card-names"}${forwardQS ? ("?" + forwardQS) : ""}`;
-    const resp = await fetch(target);
-    const text = await resp.text();
-    const ct = resp.headers.get("content-type") || "application/json; charset=utf-8";
-    return { statusCode: resp.status, headers: { ...CORS, "Content-Type": ct }, body: text };
-  } catch (err) {
-    console.error("swu function error:", err);
-    return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: String(err) }) };
+  } catch (e) {
+    return {
+      statusCode: 500,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: e.message || String(e) })
+    };
   }
-};
+}

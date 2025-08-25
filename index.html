@@ -3,52 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SW:Unlimited — Proxy Sheet Tool</title>
+  <title>Silhouette Sheet Tool — SW:Unlimited</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Silhouette Sheet Tool</div>
+    <div class="brand">Silhouette Sheet Tool <span class="sub">— SW:Unlimited</span></div>
     <div class="actions">
       <button id="btnExport" class="btn">Export PNG</button>
       <button id="btnPrint" class="btn btn-primary">Print</button>
     </div>
   </header>
-
   <main class="layout">
-    <aside class="panel no-print">
-      <section class="field">
-        <label>Template Image (optional):</label>
-        <input type="file" id="templateFile" accept="image/*" />
-        <div class="hint">A baked-in template is used by default.</div>
-      </section>
+    <aside class="sidebar">
+      <h3>Template Image (optional):</h3>
+      <input type="file" id="fileTemplate" accept="image/*" />
+      <p class="hint">A baked‑in template is used by default.</p>
 
-      <section class="field">
-        <label>Card list (one per line, optional "xN" quantity):</label>
-        <textarea id="cardList" rows="12">Luke Skywalker
-Darth Vader
-Grogu
-Mandalorian</textarea>
-      </section>
+      <h3>Card list (one per line, optional “xN” quantity):</h3>
+      <textarea id="deck" spellcheck="false" placeholder="Luke Skywalker&#10;Darth Vader&#10;Grogu&#10;Mandalorian"></textarea>
 
-      <section class="field checkbox">
+      <label class="check">
         <input type="checkbox" id="showGuides" checked />
-        <label for="showGuides">Show trim guides (preview only)</label>
-      </section>
+        Show trim guides (preview only)
+      </label>
 
-      <section class="field">
-        <button id="btnBuild" class="btn btn-primary">Build Sheets</button>
-        <div id="status" class="status">Ready.</div>
-      </section>
+      <button id="btnBuild" class="btn full">Build Sheets</button>
+      <div id="status" class="status">Ready.</div>
+      <div class="tip">Tip: 2.5×3.5 in @ 300 DPI, 4×2 layout per sheet.</div>
     </aside>
 
-    <section class="stage">
-      <div class="sheetbar">
-        <button id="prevSheet" class="btn small">◀</button>
-        <span id="sheetLabel">Sheet 1 of 1</span>
-        <button id="nextSheet" class="btn small">▶</button>
+    <section class="canvas-wrap">
+      <div class="sheet-toolbar">
+        <button id="prev" class="btn small">&#9664;</button>
+        <span id="pager">Sheet 1 of 1</span>
+        <button id="next" class="btn small">&#9654;</button>
       </div>
-      <div class="canvas-wrap">
+      <div id="print-area" class="print-area">
         <canvas id="sheet" width="3300" height="2550"></canvas>
       </div>
     </section>
